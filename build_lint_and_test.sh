@@ -1,4 +1,5 @@
 git submodule update --init
+git config submodule.external/slaythetext.ignore untracked
 
 # Make sure we are in a venv
 if [ -z "$VIRTUAL_ENV" ]; then
