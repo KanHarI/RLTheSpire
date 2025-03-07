@@ -21,6 +21,9 @@ encoder:
   n_output_columns: 1
   activation: "gelu"
   linear_size_multiplier: 4
+vae:
+  gamma: 0.5
+  kl_loss_weight: 1.0
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"
