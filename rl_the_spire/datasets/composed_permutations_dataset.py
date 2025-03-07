@@ -40,6 +40,12 @@ class ComposedPermutationDataset(
         """
         self.config = config
 
+    def set_gamma(self, gamma: float) -> None:
+        """
+        Set the gamma parameter for the dataset.
+        """
+        self.config.gamma = gamma
+
     def __iter__(self) -> Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """
         Yields:

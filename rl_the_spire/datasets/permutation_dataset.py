@@ -35,6 +35,12 @@ class PermutationDataset(IterableDataset[torch.Tensor]):
         """
         self.config = config
 
+    def set_gamma(self, gamma: float) -> None:
+        """
+        Set the gamma parameter for the dataset.
+        """
+        self.config.gamma = gamma
+
     def __iter__(self) -> Iterator[torch.Tensor]:
         """
         Yields:
