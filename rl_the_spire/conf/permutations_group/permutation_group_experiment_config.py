@@ -6,7 +6,9 @@ from rl_the_spire.conf.permutations_group.permutation_group_dataset_config impor
 from rl_the_spire.conf.permutations_group.permutation_group_encoder_config import (
     PermutationGroupEncoderConfig,
 )
-from rl_the_spire.conf.permutations_group.permutation_group_vae_config import PermutationGroupVAEConfig
+from rl_the_spire.conf.permutations_group.permutation_group_vae_config import (
+    PermutationGroupVAEConfig,
+)
 
 
 @dataclasses.dataclass
