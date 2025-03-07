@@ -1,6 +1,5 @@
-from typing import Any
-
 import logging
+from typing import Any
 
 import dacite
 import hydra
@@ -20,10 +19,10 @@ from rl_the_spire.datasets.permutation_and_inverse_dataset import (
 
 # Configure logger with timestamp and module name
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
-logger = logging.getLogger(__name__)   # <-- Logger instance
+logger = logging.getLogger(__name__)  # <-- Logger instance
 
 
 @hydra.main(
@@ -75,7 +74,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         num_workers=config.dataloader_num_workers,
         prefetch_factor=config.dataloader_prefetch_factor,
     )
-    
+
     return 0
 
 

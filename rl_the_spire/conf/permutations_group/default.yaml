@@ -1,0 +1,5 @@
+n_max_permutation_size: 10
+gamma: 1.0
+batch_size: 32
+dataloader_num_workers: 2
+dataloader_prefetch_factor: 2
