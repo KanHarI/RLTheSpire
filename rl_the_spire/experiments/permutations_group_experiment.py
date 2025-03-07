@@ -67,16 +67,20 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     # Log and create inversions dataloader
     logger.info("Creating inversions dataloader...")
+
     num_workers = 0
+    prefetch_factor = None
 
     if platform.system() == "Linux":
         num_workers = config.dataset.num_workers
+        prefetch_factor = config.dataset.prefetch_factor
+
 
     inversions_dataloader = DataLoader(
         inversions_dataset,
         batch_size=config.dataset.batch_size,
         num_workers=num_workers,
-        prefetch_factor=config.dataset.prefetch_factor,
+        prefetch_factor=prefetch_factor,
         pin_memory=True,
     )
 
@@ -85,8 +89,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     composition_dataloader = DataLoader(
         composition_dataset,
         batch_size=config.dataset.batch_size,
-        num_workers=config.dataset.num_workers,
-        prefetch_factor=config.dataset.prefetch_factor,
+        num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
+        pin_memory=True,
     )
 
     # Create permutation encoder
