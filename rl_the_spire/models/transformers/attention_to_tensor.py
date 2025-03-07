@@ -17,7 +17,8 @@ class AttentionToTensorConfig:
         n_embed (int): Dimensionality of the input sequence embeddings.
         n_output_embed (int): Dimensionality of the output embedding for each grid cell.
                               Must be divisible by n_heads.
-        n_output_size (int): The spatial size N of the output grid (output shape is N x N x n_output_embed).
+        n_output_rows (int): The number of rows in the output grid.
+        n_output_columns (int): The number of columns in the output grid.
         n_heads (int): Number of attention heads.
         activation (Callable[[torch.Tensor], torch.Tensor]): Activation function for the MLP.
         linear_size_multiplier (int): Multiplier for the hidden size in the MLP.
@@ -26,10 +27,10 @@ class AttentionToTensorConfig:
         init_std (float): Standard deviation for weight initialization.
         mlp_dropout (float): Dropout probability in the MLP.
     """
-
     n_embed: int
     n_output_embed: int
-    n_output_size: int
+    n_output_rows: int
+    n_output_columns: int
     n_heads: int
     activation: Callable[[torch.Tensor], torch.Tensor]
     linear_size_multiplier: int
@@ -42,18 +43,17 @@ class AttentionToTensorConfig:
 class AttentionToTensor(nn.Module):
     """
     Encodes an unordered sequence of vectors into a grid tensor of shape
-    (batch_size, n_output_size, n_output_size, n_output_embed) using attention.
+    (batch_size, n_output_rows, n_output_columns, n_output_embed) using attention.
 
-    Instead of a single query parameter, this module learns two query tensors
-    (row_query and col_query), each of length n_output_size. For a grid cell at
-    position (m, n), the query is formed by concatenating the mth entry of row_query
+    Instead of a single query parameter, this module learns two query tensors:
+      - row_query of shape (n_output_rows, n_output_embed // 2)
+      - col_query of shape (n_output_columns, n_output_embed // 2)
+    For a grid cell at position (m, n), the query is formed by concatenating the mth entry of row_query
     with the nth entry of col_query, then projecting it with a learned linear map.
 
-    Keys and values are computed from the input sequence. For each grid cell, attention
-    is computed over the sequence and the attended values are aggregated. An MLP (with
-    a residual connection) is applied to the aggregated output.
+    Keys and values are computed from the input sequence. For each grid cell, attention is computed over the sequence
+    and the attended values are aggregated. An MLP (with a residual connection) is applied to the aggregated output.
     """
-
     def __init__(self, config: AttentionToTensorConfig):
         super().__init__()
         assert (
@@ -79,19 +79,20 @@ class AttentionToTensor(nn.Module):
                 requires_grad=True,
             )
         )
-        # Learn two query tensors. They will be concatenated to form a query vector.
-        # Each has shape (n_output_size, n_output_embed // 2), so concatenation gives n_output_embed.
+        # Learn two query tensors.
+        # row_query: (n_output_rows, n_output_embed // 2)
         self.row_query = nn.Parameter(
             torch.zeros(
-                (self.config.n_output_size, self.config.n_output_embed // 2),
+                (self.config.n_output_rows, self.config.n_output_embed // 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
                 requires_grad=True,
             )
         )
+        # col_query: (n_output_columns, n_output_embed // 2)
         self.col_query = nn.Parameter(
             torch.zeros(
-                (self.config.n_output_size, self.config.n_output_embed // 2),
+                (self.config.n_output_columns, self.config.n_output_embed // 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
                 requires_grad=True,
@@ -147,11 +148,12 @@ class AttentionToTensor(nn.Module):
 
         Returns:
             torch.Tensor: Output tensor of shape
-                          (batch_size, n_output_size, n_output_size, n_output_embed).
+                          (batch_size, n_output_rows, n_output_columns, n_output_embed).
         """
         batch_size = x.shape[0]
         seq_len = x.shape[1]
-        N = self.config.n_output_size
+        R = self.config.n_output_rows
+        C = self.config.n_output_columns
         d_total = self.config.n_output_embed
         H = self.config.n_heads
         d = d_total // H
@@ -159,7 +161,7 @@ class AttentionToTensor(nn.Module):
         # Compute keys and values from the input.
         # x: (B, seq_len, n_embed)
         # transformer_to_kv: (n_embed, 2*n_output_embed)
-        # Resulting kv: (B, seq_len, 2*n_output_embed)
+        # kv: (B, seq_len, 2*n_output_embed)
         kv = (
             torch.einsum("ij,bnj->bnj", self.transformer_to_kv, x)
             + self.transformer_to_kv_bias
@@ -170,38 +172,39 @@ class AttentionToTensor(nn.Module):
         v = v.view(batch_size, seq_len, H, d)
 
         # Build the query grid.
-        # row_query: (N, d_total//2) and col_query: (N, d_total//2)
-        # We use broadcasting to create a grid of shape (N, N, d_total) where:
-        #   grid[m, n] = concat(row_query[m], col_query[n])
-        row_query_exp = self.row_query.unsqueeze(1)  # (N, 1, d_total//2)
-        col_query_exp = self.col_query.unsqueeze(0)  # (1, N, d_total//2)
+        # row_query: (R, d_total//2) and col_query: (C, d_total//2)
+        # Create a grid of shape (R, C, d_total) by concatenating row and column queries.
+        row_query_exp = self.row_query.unsqueeze(1)  # (R, 1, d_total//2)
+        col_query_exp = self.col_query.unsqueeze(0)    # (1, C, d_total//2)
         query_grid = torch.cat(
-            [row_query_exp.expand(-1, N, -1), col_query_exp.expand(N, -1, -1)], dim=2
-        )  # (N, N, d_total)
-        # Flatten the grid to shape (N*N, d_total)
-        query_grid = query_grid.view(N * N, d_total)
+            [row_query_exp.expand(-1, C, -1), col_query_exp.expand(R, -1, -1)],
+            dim=2,
+        )  # (R, C, d_total)
+        # Flatten the grid to shape (R*C, d_total)
+        query_grid = query_grid.view(R * C, d_total)
         # Project the queries.
-        query_grid = torch.matmul(query_grid, self.query_projection)  # (N*N, d_total)
-        # Reshape to (N*N, H, d)
-        query_grid = query_grid.view(N * N, H, d)
+        query_grid = torch.matmul(query_grid, self.query_projection)  # (R*C, d_total)
+        # Reshape to (R*C, H, d)
+        query_grid = query_grid.view(R * C, H, d)
 
         # Compute attention scores.
-        # k: (B, seq_len, H, d), query_grid: (N*N, H, d)
-        # scores: (B, seq_len, H, N*N)
+        # k: (B, seq_len, H, d), query_grid: (R*C, H, d)
+        # scores: (B, seq_len, H, R*C)
         scores = torch.einsum("bshd,qhd->bshq", k, query_grid)
         if mask is not None:
             scores = scores.masked_fill(~mask.unsqueeze(2).unsqueeze(3), float("-inf"))
         # Softmax over the sequence dimension.
-        att = torch.softmax(scores, dim=1)  # (B, seq_len, H, N*N)
+        att = torch.softmax(scores, dim=1)  # (B, seq_len, H, R*C)
 
         # Aggregate values with attention.
-        # For each grid cell, sum over the sequence: (B, N*N, H, d)
+        # For each grid cell, sum over the sequence:
+        # aggregated: (B, R*C, H, d)
         aggregated = torch.einsum("bshd,bshq->bqhd", v, att)
-        # Reshape to grid: (B, N, N, d_total)
-        aggregated = aggregated.view(batch_size, N, N, d_total)
+        # Reshape to grid: (B, R, C, d_total)
+        aggregated = aggregated.view(batch_size, R, C, d_total)
 
         # Apply MLP (with a residual connection) to each grid cell.
-        aggregated_flat = aggregated.view(batch_size, N * N, d_total)
+        aggregated_flat = aggregated.view(batch_size, R * C, d_total)
         out_flat = aggregated_flat + self.mlp(aggregated_flat)
-        out = out_flat.view(batch_size, N, N, d_total)
+        out = out_flat.view(batch_size, R, C, d_total)
         return out  # type: ignore

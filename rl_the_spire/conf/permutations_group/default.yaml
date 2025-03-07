@@ -3,3 +3,6 @@ gamma: 1.0
 batch_size: 32
 dataloader_num_workers: 2
 dataloader_prefetch_factor: 2
+iterations: 10000
+eval_interval: 100
+experiment_name: "permutations_group_cpu_default"

@@ -1,9 +1,11 @@
 import logging
+import platform
 from typing import Any
 
 import dacite
 import hydra
 from torch.utils.data import DataLoader
+import wandb
 
 from rl_the_spire.conf.permutations_group.PermutationsGroupExperimentConfig import (
     PermutationsGroupExperimentConfig,
@@ -58,10 +60,15 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     # Log and create inversions dataloader
     logger.info("Creating inversions dataloader...")
+    num_workers = 0
+
+    if platform.system() == "Linux":
+        num_workers = config.dataloader_num_workers
+    
     inversions_dataloader = DataLoader(
         inversions_dataset,
         batch_size=config.batch_size,
-        num_workers=config.dataloader_num_workers,
+        num_workers=num_workers,
         prefetch_factor=config.dataloader_prefetch_factor,
         pin_memory=True,
     )
@@ -74,6 +81,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         num_workers=config.dataloader_num_workers,
         prefetch_factor=config.dataloader_prefetch_factor,
     )
+    wandb.init(project="rl_the_spire", name=config.experiment_name)
+    wandb.config.update(config)
 
     return 0
 

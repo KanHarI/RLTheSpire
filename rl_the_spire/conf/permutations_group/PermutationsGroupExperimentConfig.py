@@ -8,3 +8,6 @@ class PermutationsGroupExperimentConfig:
     batch_size: int
     dataloader_num_workers: int
     dataloader_prefetch_factor: int
+    iterations: int
+    eval_interval: int
+    experiment_name: str
