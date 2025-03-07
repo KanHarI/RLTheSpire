@@ -1,5 +1,6 @@
 import dataclasses
 
+from rl_the_spire.conf.permutations_group.permutation_group_conv_transformer_config import PermutationGroupConvTransformerConfig
 from rl_the_spire.conf.permutations_group.permutation_group_dataset_config import (
     PermutationGroupDatasetConfig,
 )
@@ -16,6 +17,7 @@ class PermutationGroupExperimentConfig:
     dataset: PermutationGroupDatasetConfig
     encoder: PermutationGroupEncoderConfig
     vae: PermutationGroupVAEConfig
+    conv_transformer: PermutationGroupConvTransformerConfig
     iterations: int
     eval_interval: int
     experiment_name: str

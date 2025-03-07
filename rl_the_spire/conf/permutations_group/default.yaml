@@ -24,6 +24,8 @@ encoder:
 vae:
   gamma: 0.5
   kl_loss_weight: 1.0
+conv_transformer:
+  n_heads: 4
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"

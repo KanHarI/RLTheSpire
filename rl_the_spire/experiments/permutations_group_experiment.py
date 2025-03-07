@@ -117,6 +117,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         n_output_columns=config.encoder.n_output_columns,
         activation=get_activation(config.encoder.activation),
         linear_size_multiplier=config.encoder.linear_size_multiplier,
+        conv_transformer_n_heads=config.conv_transformer.n_heads,
     )
     permutation_encoder = PermutationEncoder(permutation_encoder_config)
 
