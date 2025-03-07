@@ -14,7 +14,7 @@ class AttentionToVecConfig:
     activation: Callable[[torch.Tensor], torch.Tensor]
     linear_size_multiplier: int
     dtype: torch.dtype
-    device: str
+    device: torch.device
     init_std: float
     mlp_dropout: float
 

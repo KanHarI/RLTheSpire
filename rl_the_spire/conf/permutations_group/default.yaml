@@ -1,8 +1,26 @@
-n_max_permutation_size: 10
-gamma: 2.0
-batch_size: 32
-dataloader_num_workers: 2
-dataloader_prefetch_factor: 2
+dataset:
+  n_max_permutation_size: 10
+  gamma: 2.0
+  batch_size: 32
+  num_workers: 2
+  prefetch_factor: 2
+encoder:
+  n_embed: 128
+  n_heads: 4
+  n_layers: 4
+  attn_dropout: 0.0
+  resid_dropout: 0.0
+  dtype: "float32"
+  device: "cpu"
+  init_std: 0.02
+  mlp_dropout: 0.0
+  ln_eps: 1e-5
+  n_output_heads: 1
+  n_output_embed: 128
+  n_output_rows: 1
+  n_output_columns: 1
+  activation: "gelu"
+  linear_size_multiplier: 4
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"

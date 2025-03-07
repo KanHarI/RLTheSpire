@@ -18,7 +18,7 @@ class TransformerBlockConfig:
     attn_dropout: float
     resid_dropout: float
     dtype: torch.dtype
-    device: str
+    device: torch.device
     linear_size_multiplier: int
     activation: Callable[[torch.Tensor], torch.Tensor]
     mlp_dropout: float

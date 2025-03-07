@@ -11,7 +11,7 @@ class MLPConfig:
     linear_size_multiplier: int
     activation: Callable[[torch.Tensor], torch.Tensor]
     dtype: torch.dtype
-    device: str
+    device: torch.device
     init_std: float
     dropout: float
 

@@ -7,9 +7,12 @@ import hydra
 import wandb
 from torch.utils.data import DataLoader
 
-from rl_the_spire.conf.permutations_group.PermutationsGroupExperimentConfig import (
-    PermutationsGroupExperimentConfig,
+from rl_the_spire.conf.permutations_group.permutation_group_experiment_config import (
+    PermutationGroupExperimentConfig,
 )
+from rl_the_spire.conf.utils.activations import get_activation
+from rl_the_spire.conf.utils.devices import get_device
+from rl_the_spire.conf.utils.dtypes import get_dtype
 from rl_the_spire.datasets.composed_permutations_dataset import (
     ComposedPermutationDataset,
     ComposedPermutationDatasetConfig,
@@ -35,16 +38,16 @@ logger = logging.getLogger(__name__)  # <-- Logger instance
     config_path="../conf/permutations_group", config_name="default", version_base=None
 )
 def main(hydra_cfg: dict[Any, Any]) -> int:
-    config: PermutationsGroupExperimentConfig = dacite.from_dict(
-        data_class=PermutationsGroupExperimentConfig,
+    config: PermutationGroupExperimentConfig = dacite.from_dict(
+        data_class=PermutationGroupExperimentConfig,
         data=hydra_cfg,
     )
 
     # Log and create inversions dataset configuration
     logger.info("Creating inversion dataset config...")
     inversions_dataset_config = PermutationInverseDatasetConfig(
-        n_max_permutation_size=config.n_max_permutation_size,
-        gamma=config.dataset_gamma,
+        n_max_permutation_size=config.dataset.n_max_permutation_size,
+        gamma=config.dataset.gamma,
     )
 
     # Log and create inversions dataset
@@ -54,8 +57,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     # Log and create composition dataset configuration
     logger.info("Creating composition dataset config...")
     composition_dataset_config = ComposedPermutationDatasetConfig(
-        n_max_permutation_size=config.n_max_permutation_size,
-        gamma=config.dataset_gamma,
+        n_max_permutation_size=config.dataset.n_max_permutation_size,
+        gamma=config.dataset.gamma,
     )
 
     # Log and create composition dataset
@@ -67,13 +70,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     num_workers = 0
 
     if platform.system() == "Linux":
-        num_workers = config.dataloader_num_workers
+        num_workers = config.dataset.num_workers
 
     inversions_dataloader = DataLoader(
         inversions_dataset,
-        batch_size=config.batch_size,
+        batch_size=config.dataset.batch_size,
         num_workers=num_workers,
-        prefetch_factor=config.dataloader_prefetch_factor,
+        prefetch_factor=config.dataset.prefetch_factor,
         pin_memory=True,
     )
 
@@ -81,14 +84,32 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     logger.info("Creating composition dataloader...")
     composition_dataloader = DataLoader(
         composition_dataset,
-        batch_size=config.batch_size,
-        num_workers=config.dataloader_num_workers,
-        prefetch_factor=config.dataloader_prefetch_factor,
+        batch_size=config.dataset.batch_size,
+        num_workers=config.dataset.num_workers,
+        prefetch_factor=config.dataset.prefetch_factor,
     )
 
     # Create permutation encoder
     logger.info("Creating permutation encoder...")
-    permutation_encoder_config = PermutationEncoderConfig()
+    permutation_encoder_config = PermutationEncoderConfig(
+        n_max_permutation_size=config.dataset.n_max_permutation_size,
+        n_embed=config.encoder.n_embed,
+        n_heads=config.encoder.n_heads,
+        n_layers=config.encoder.n_layers,
+        attn_dropout=config.encoder.attn_dropout,
+        resid_dropout=config.encoder.resid_dropout,
+        dtype=get_dtype(config.encoder.dtype),
+        device=get_device(config.encoder.device),
+        init_std=config.encoder.init_std,
+        mlp_dropout=config.encoder.mlp_dropout,
+        ln_eps=config.encoder.ln_eps,
+        n_output_heads=config.encoder.n_output_heads,
+        n_output_embed=config.encoder.n_output_embed,
+        n_output_rows=config.encoder.n_output_rows,
+        n_output_columns=config.encoder.n_output_columns,
+        activation=get_activation(config.encoder.activation),
+        linear_size_multiplier=config.encoder.linear_size_multiplier,
+    )
     permutation_encoder = PermutationEncoder(permutation_encoder_config)
 
     # Initialize wandb

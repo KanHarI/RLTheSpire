@@ -37,7 +37,7 @@ class GridToSequenceConfig:
     linear_size_multiplier: int
     activation: Callable[[torch.Tensor], torch.Tensor]
     dtype: torch.dtype
-    device: str
+    device: torch.device
     init_std: float
     ln_eps: float = 1e-5
 

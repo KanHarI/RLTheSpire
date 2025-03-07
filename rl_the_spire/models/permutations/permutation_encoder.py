@@ -26,7 +26,7 @@ class PermutationEncoderConfig:
     attn_dropout: float
     resid_dropout: float
     dtype: torch.dtype
-    device: str
+    device: torch.device
     init_std: float
     mlp_dropout: float
     ln_eps: float

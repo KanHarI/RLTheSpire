@@ -8,7 +8,7 @@ class PermutationEmbedderConfig:
     n_max_permutation_size: int
     n_embed: int
     dtype: torch.dtype
-    device: str
+    device: torch.device
     init_std: float
 
 
