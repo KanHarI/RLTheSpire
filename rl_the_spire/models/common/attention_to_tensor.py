@@ -68,6 +68,7 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_embed, self.config.n_output_embed * 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
+                requires_grad=True,
             )
         )
         self.transformer_to_kv_bias = nn.Parameter(
@@ -75,6 +76,7 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_output_embed * 2,),
                 dtype=self.config.dtype,
                 device=self.config.device,
+                requires_grad=True,
             )
         )
         # Learn two query tensors. They will be concatenated to form a query vector.
@@ -84,6 +86,7 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_output_size, self.config.n_output_embed // 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
+                requires_grad=True,
             )
         )
         self.col_query = nn.Parameter(
@@ -91,6 +94,7 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_output_size, self.config.n_output_embed // 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
+                requires_grad=True,
             )
         )
         # Learned linear projection to map the concatenated query to the proper query space.
@@ -99,6 +103,7 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_output_embed, self.config.n_output_embed),
                 dtype=self.config.dtype,
                 device=self.config.device,
+                requires_grad=True,
             )
         )
         # MLP for post-processing the aggregated grid.
