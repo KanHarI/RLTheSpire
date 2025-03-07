@@ -75,24 +75,27 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         num_workers = config.dataset.num_workers
         prefetch_factor = config.dataset.prefetch_factor
 
-
-    inversions_dataloader = iter(DataLoader(
-        inversions_dataset,
-        batch_size=config.dataset.batch_size,
-        num_workers=num_workers,
-        prefetch_factor=prefetch_factor,
-        pin_memory=True,
-    ))
+    inversions_dataloader = iter(
+        DataLoader(
+            inversions_dataset,
+            batch_size=config.dataset.batch_size,
+            num_workers=num_workers,
+            prefetch_factor=prefetch_factor,
+            pin_memory=True,
+        )
+    )
 
     # Log and create composition dataloader
     logger.info("Creating composition dataloader...")
-    composition_dataloader = iter(DataLoader(
-        composition_dataset,
-        batch_size=config.dataset.batch_size,
-        num_workers=num_workers,
-        prefetch_factor=prefetch_factor,
-        pin_memory=True,
-    ))
+    composition_dataloader = iter(
+        DataLoader(
+            composition_dataset,
+            batch_size=config.dataset.batch_size,
+            num_workers=num_workers,
+            prefetch_factor=prefetch_factor,
+            pin_memory=True,
+        )
+    )
 
     # Create permutation encoder
     logger.info("Creating permutation encoder...")
@@ -130,14 +133,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         p, q, r = next(composition_dataloader)
 
         # Run autoencoder
-        encoded_perm = permutation_encoder(perm)
-        encoded_inv = permutation_encoder(inv)
-        encoded_p = permutation_encoder(p)
-        encoded_q = permutation_encoder(q)
-        encoded_r = permutation_encoder(r)
+        encoded_perm_mus, encoded_perm_logvars = permutation_encoder(perm)
+        encoded_inv_mus, encoded_inv_logvars = permutation_encoder(inv)
+        encoded_p_mus, encoded_p_logvars = permutation_encoder(p)
+        encoded_q_mus, encoded_q_logvars = permutation_encoder(q)
+        encoded_r_mus, encoded_r_logvars = permutation_encoder(r)
 
         raise NotImplementedError
-    
+
     return 0
 
 
