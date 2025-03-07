@@ -3,8 +3,8 @@ from typing import Callable, Optional
 
 import torch
 
-from rl_the_spire.models.mlp import MLP, MLPConfig
-from rl_the_spire.models.multi_headed_attention import (
+from rl_the_spire.models.common.mlp import MLP, MLPConfig
+from rl_the_spire.models.transformers.multi_headed_attention import (
     MultiHeadedAttention,
     MultiHeadedAttentionConfig,
 )
