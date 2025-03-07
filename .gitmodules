@@ -1,0 +1,3 @@
+[submodule "external/slaythetext"]
+	path = external/slaythetext
+	url = https://github.com/Difio3333/slaythetext.git

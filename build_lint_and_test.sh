@@ -1,3 +1,5 @@
+git submodule update --init
+
 # Make sure we are in a venv
 if [ -z "$VIRTUAL_ENV" ]; then
     echo "No virtual environment found. Please activate a venv and try again."

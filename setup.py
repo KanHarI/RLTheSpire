@@ -6,8 +6,14 @@ __VERSION__ = "0.0.1"
 setup(
     name="RLTheSpire",
     version=__VERSION__,
-    packages=["rl_the_spire"],
+        packages=find_packages(where='.', include=['rl_the_spire', 'external.slaythetext']),
+    package_dir={
+        'rl_the_spire': 'rl_the_spire',
+        'external.slaythetext': 'external/slaythetext',
+    },
     install_requires=[
+        "ansimarkup",
+        "colorama",
         "dacite",
         "einops",
         "hydra-core",
