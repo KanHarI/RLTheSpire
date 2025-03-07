@@ -76,23 +76,23 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         prefetch_factor = config.dataset.prefetch_factor
 
 
-    inversions_dataloader = DataLoader(
+    inversions_dataloader = iter(DataLoader(
         inversions_dataset,
         batch_size=config.dataset.batch_size,
         num_workers=num_workers,
         prefetch_factor=prefetch_factor,
         pin_memory=True,
-    )
+    ))
 
     # Log and create composition dataloader
     logger.info("Creating composition dataloader...")
-    composition_dataloader = DataLoader(
+    composition_dataloader = iter(DataLoader(
         composition_dataset,
         batch_size=config.dataset.batch_size,
         num_workers=num_workers,
         prefetch_factor=prefetch_factor,
         pin_memory=True,
-    )
+    ))
 
     # Create permutation encoder
     logger.info("Creating permutation encoder...")
@@ -119,15 +119,15 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     # Initialize wandb
     logger.info("Initializing WanDB...")
-    wandb.init(project="rl_the_spire.permutations_group", name=config.experiment_name)
-    wandb.config.update(config)  # type: ignore
+    # wandb.init(project="rl_the_spire.permutations_group", name=config.experiment_name)
+    # wandb.config.update(config)  # type: ignore
 
     # Run experiment
     logger.info("Running experiment...")
     TOTAL_ENCODED_PERMUTATIONS = 5
     for i in range(config.iterations):
-        perm, inv = inversions_dataloader.next()
-        p, q, r = composition_dataloader.next()
+        perm, inv = next(inversions_dataloader)
+        p, q, r = next(composition_dataloader)
 
         # Run autoencoder
         encoded_perm = permutation_encoder(perm)
@@ -136,6 +136,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         encoded_q = permutation_encoder(q)
         encoded_r = permutation_encoder(r)
 
+        raise NotImplementedError
+    
     return 0
 
 

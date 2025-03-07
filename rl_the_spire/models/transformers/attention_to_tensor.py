@@ -165,7 +165,7 @@ class AttentionToTensor(nn.Module):
         # transformer_to_kv: (n_embed, 2*n_output_embed)
         # kv: (B, seq_len, 2*n_output_embed)
         kv = (
-            torch.einsum("ij,bnj->bnj", self.transformer_to_kv, x)
+            torch.einsum("ij,bni->bnj", self.transformer_to_kv, x)
             + self.transformer_to_kv_bias
         )
         k, v = torch.split(kv, d_total, dim=2)

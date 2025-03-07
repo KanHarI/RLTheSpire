@@ -88,16 +88,16 @@ class PermutationEncoder(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.embedder(x)
-        x = self.transformer_body(x)
+        x = self.transformer_body(x, extra_embed=torch.zeros_like(x[:, :, :1]))
         x = self.attention_to_tensor(x)
         # x: (batch_size, n_output_heads, n_output_rows, n_output_columns, n_output_embed)
-        # Turn into (batch_size, n_output_heads, n_output_rows * n_output_columns, n_output_embed // 2, 2)
+        # Turn into (batch_size, n_output_rows, n_output_columns, n_output_embed // 2, 2)
         # For mus, logvars
         x = x.view(
             x.shape[0],
             x.shape[1],
-            x.shape[2] * x.shape[3],
-            x.shape[4] // 2,
+            x.shape[2],
+            x.shape[3] // 2,
             2,
         )
         mus = x[:, :, :, 0]
