@@ -3,6 +3,11 @@ from typing import Callable
 
 import torch
 
+from rl_the_spire.models.transformers.transformer_block import (
+    TransformerBlock,
+    TransformerBlockConfig,
+)
+
 
 @dataclasses.dataclass
 class TransformerBodyConfig:

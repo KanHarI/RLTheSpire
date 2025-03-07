@@ -4,8 +4,8 @@ from typing import Any
 
 import dacite
 import hydra
-from torch.utils.data import DataLoader
 import wandb
+from torch.utils.data import DataLoader
 
 from rl_the_spire.conf.permutations_group.PermutationsGroupExperimentConfig import (
     PermutationsGroupExperimentConfig,
@@ -17,6 +17,10 @@ from rl_the_spire.datasets.composed_permutations_dataset import (
 from rl_the_spire.datasets.permutation_and_inverse_dataset import (
     PermutationAndInverseDataset,
     PermutationInverseDatasetConfig,
+)
+from rl_the_spire.models.permutations.permutation_encoder import (
+    PermutationEncoder,
+    PermutationEncoderConfig,
 )
 
 # Configure logger with timestamp and module name
@@ -40,7 +44,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     logger.info("Creating inversion dataset config...")
     inversions_dataset_config = PermutationInverseDatasetConfig(
         n_max_permutation_size=config.n_max_permutation_size,
-        gamma=config.gamma,
+        gamma=config.dataset_gamma,
     )
 
     # Log and create inversions dataset
@@ -51,7 +55,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     logger.info("Creating composition dataset config...")
     composition_dataset_config = ComposedPermutationDatasetConfig(
         n_max_permutation_size=config.n_max_permutation_size,
-        gamma=config.gamma,
+        gamma=config.dataset_gamma,
     )
 
     # Log and create composition dataset
@@ -64,7 +68,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     if platform.system() == "Linux":
         num_workers = config.dataloader_num_workers
-    
+
     inversions_dataloader = DataLoader(
         inversions_dataset,
         batch_size=config.batch_size,
@@ -81,8 +85,30 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         num_workers=config.dataloader_num_workers,
         prefetch_factor=config.dataloader_prefetch_factor,
     )
-    wandb.init(project="rl_the_spire", name=config.experiment_name)
-    wandb.config.update(config)
+
+    # Create permutation encoder
+    logger.info("Creating permutation encoder...")
+    permutation_encoder_config = PermutationEncoderConfig()
+    permutation_encoder = PermutationEncoder(permutation_encoder_config)
+
+    # Initialize wandb
+    logger.info("Initializing WanDB...")
+    wandb.init(project="rl_the_spire.permutations_group", name=config.experiment_name)
+    wandb.config.update(config)  # type: ignore
+
+    # Run experiment
+    logger.info("Running experiment...")
+    TOTAL_ENCODED_PERMUTATIONS = 5
+    for i in range(config.iterations):
+        perm, inv = inversions_dataloader.next()
+        p, q, r = composition_dataloader.next()
+
+        # Run autoencoder
+        encoded_perm = permutation_encoder(perm)
+        encoded_inv = permutation_encoder(inv)
+        encoded_p = permutation_encoder(p)
+        encoded_q = permutation_encoder(q)
+        encoded_r = permutation_encoder(r)
 
     return 0
 

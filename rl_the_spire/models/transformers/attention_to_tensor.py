@@ -27,6 +27,7 @@ class AttentionToTensorConfig:
         init_std (float): Standard deviation for weight initialization.
         mlp_dropout (float): Dropout probability in the MLP.
     """
+
     n_embed: int
     n_output_embed: int
     n_output_rows: int
@@ -54,6 +55,7 @@ class AttentionToTensor(nn.Module):
     Keys and values are computed from the input sequence. For each grid cell, attention is computed over the sequence
     and the attended values are aggregated. An MLP (with a residual connection) is applied to the aggregated output.
     """
+
     def __init__(self, config: AttentionToTensorConfig):
         super().__init__()
         assert (
@@ -175,7 +177,7 @@ class AttentionToTensor(nn.Module):
         # row_query: (R, d_total//2) and col_query: (C, d_total//2)
         # Create a grid of shape (R, C, d_total) by concatenating row and column queries.
         row_query_exp = self.row_query.unsqueeze(1)  # (R, 1, d_total//2)
-        col_query_exp = self.col_query.unsqueeze(0)    # (1, C, d_total//2)
+        col_query_exp = self.col_query.unsqueeze(0)  # (1, C, d_total//2)
         query_grid = torch.cat(
             [row_query_exp.expand(-1, C, -1), col_query_exp.expand(R, -1, -1)],
             dim=2,

@@ -5,8 +5,8 @@ import torch
 
 @dataclasses.dataclass
 class PermutationEmbedderConfig:
-    n_embed: int
     n_max_permutation_size: int
+    n_embed: int
     dtype: torch.dtype
     device: str
     init_std: float
