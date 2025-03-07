@@ -39,6 +39,7 @@ class GridToSequenceConfig:
     dtype: torch.dtype
     device: str
     init_std: float
+    ln_eps: float = 1e-5
 
 
 class GridToSequence(nn.Module):
@@ -105,13 +106,13 @@ class GridToSequence(nn.Module):
 
         # Layer normalizations.
         self.ln_grid = nn.LayerNorm(
-            d, eps=1e-5, device=config.device, dtype=config.dtype
+            d, eps=config.ln_eps, device=config.device, dtype=config.dtype
         )
         self.ln_query = nn.LayerNorm(
-            config.n_pos_embed, eps=1e-5, device=config.device, dtype=config.dtype
+            config.n_pos_embed, eps=config.ln_eps, device=config.device, dtype=config.dtype
         )
         self.ln_mlp = nn.LayerNorm(
-            d, eps=1e-5, device=config.device, dtype=config.dtype
+            d, eps=config.ln_eps, device=config.device, dtype=config.dtype
         )
 
     def init_weights(self) -> None:
