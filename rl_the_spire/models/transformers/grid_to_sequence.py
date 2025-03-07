@@ -109,7 +109,10 @@ class GridToSequence(nn.Module):
             d, eps=config.ln_eps, device=config.device, dtype=config.dtype
         )
         self.ln_query = nn.LayerNorm(
-            config.n_pos_embed, eps=config.ln_eps, device=config.device, dtype=config.dtype
+            config.n_pos_embed,
+            eps=config.ln_eps,
+            device=config.device,
+            dtype=config.dtype,
         )
         self.ln_mlp = nn.LayerNorm(
             d, eps=config.ln_eps, device=config.device, dtype=config.dtype
