@@ -36,5 +36,5 @@ experiment_name: "permutations_group_cpu_default"
 wandb_enabled: true
 log_interval: 20
 reconstruction_loss_weight: 1.0
-neural_inv_perm_loss_weight: 1.0
-neural_comp_perm_loss_weight: 1.0
+neural_inv_perm_loss_weight: 0.5
+neural_comp_perm_loss_weight: 0.5
