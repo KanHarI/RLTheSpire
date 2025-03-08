@@ -172,7 +172,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # -------------------
         #       EVAL
         # -------------------
-        if step % config.eval_interval == 0 and step > 0:
+        if step % config.eval_interval == 0:
             permutation_encoder.eval()
             permutations_decoder.eval()
             with torch.no_grad():
@@ -357,16 +357,22 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         optimizer.step()
 
         # Log training losses
-        if config.wandb_enabled and step % config.log_interval == 0:
-            wandb.log(
-                {
-                    "train/total_loss": total_loss.item(),
-                    "train/kl_loss": kl_losses.item(),  # raw KL
-                    "train/kl_loss_weighted": kl_losses_weighted.item(),
-                    "train/reconstruction_loss": reconstruction_losses.item(),
-                    "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
-                },
-                step=step,
+        if step % config.log_interval == 0:
+            if config.wandb_enabled:
+                wandb.log(
+                    {
+                        "train/total_loss": total_loss.item(),
+                        "train/kl_loss": kl_losses.item(),  # raw KL
+                        "train/kl_loss_weighted": kl_losses_weighted.item(),
+                        "train/reconstruction_loss": reconstruction_losses.item(),
+                        "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
+                    },
+                    step=step,
+                )
+            logger.info(
+                f"[Train step {step}] total={total_loss:.4f}, "
+                f"kl={kl_losses:.4f}, "
+                f"recon={reconstruction_losses:.4f}"
             )
 
     return 0

@@ -81,7 +81,7 @@ class PermutationDecoder(torch.nn.Module):
 
         grid_to_sequence_config = GridToSequenceConfig(
             grid_n_embed=config.n_embed_grid,
-            seq_n_embed=config.n_embed_grid,
+            seq_n_embed=config.n_embed_sequence,
             n_heads=config.conv_transformer_n_heads,
             attn_dropout=config.attn_dropout,
             resid_dropout=config.resid_dropout,

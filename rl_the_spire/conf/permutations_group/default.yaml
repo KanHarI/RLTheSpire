@@ -5,7 +5,7 @@ dataset:
   num_workers: 2
   prefetch_factor: 2
 encoder:
-  n_embed: 128
+  n_embed: 64
   n_heads: 4
   n_layers: 4
   attn_dropout: 0.0
@@ -15,8 +15,8 @@ encoder:
   init_std: 0.02
   mlp_dropout: 0.0
   ln_eps: 1e-5
-  n_output_heads: 1
-  n_output_embed: 128
+  n_output_heads: 2
+  n_output_embed: 16
   n_output_rows: 8
   n_output_columns: 8
   activation: "gelu"
@@ -29,3 +29,6 @@ conv_transformer:
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"
+wandb_enabled: false
+log_interval: 1
+reconstruction_loss_weight: 1.0
