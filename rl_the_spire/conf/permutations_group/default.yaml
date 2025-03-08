@@ -1,13 +1,13 @@
 dataset:
-  n_max_permutation_size: 10
+  n_max_permutation_size: 5
   gamma: 2.0
-  batch_size: 32
+  batch_size: 128
   num_workers: 2
   prefetch_factor: 2
 encoder:
-  n_embed: 64
+  n_embed: 128
   n_heads: 4
-  n_layers: 4
+  n_layers: 6
   attn_dropout: 0.0
   resid_dropout: 0.0
   dtype: "float32"
@@ -23,12 +23,12 @@ encoder:
   linear_size_multiplier: 4
 vae:
   gamma: 0.5
-  kl_loss_weight: 1.0
+  kl_loss_weight: 0.01
 conv_transformer:
   n_heads: 4
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"
-wandb_enabled: false
-log_interval: 1
+wandb_enabled: true
+log_interval: 20
 reconstruction_loss_weight: 1.0

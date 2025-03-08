@@ -155,7 +155,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     params = list(permutation_encoder.parameters()) + list(
         permutations_decoder.parameters()
     )
-    optimizer = torch.optim.AdamW(params, lr=1e-3)
+    optimizer = torch.optim.AdamW(params, lr=2e-4)
 
     if config.wandb_enabled:
         # 6. Initialize Weights & Biases
@@ -199,7 +199,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     ],
                 ):
                     kl_losses_eval += (
-                        kl_loss(mus, logvars).sum() / TOTAL_ENCODED_PERMUTATIONS
+                        kl_loss(mus, logvars).mean(dim=0).sum()
+                        / TOTAL_ENCODED_PERMUTATIONS
                     )
 
                 kl_losses_eval_weighted = kl_losses_eval * config.vae.kl_loss_weight
@@ -237,7 +238,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     [eval_perm, eval_inv, eval_p, eval_q, eval_r],
                 ):
                     reconstruction_losses_eval += (
-                        permutation_encoder.embedder.nll_loss(dec, orig).sum()
+                        permutation_encoder.embedder.nll_loss(dec, orig)
+                        .mean(dim=0)
+                        .sum()
                         / TOTAL_ENCODED_PERMUTATIONS
                     )
                 reconstruction_losses_eval_weighted = (
@@ -301,7 +304,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 encoded_r_logvars,
             ],
         ):
-            kl_losses += kl_loss(mus, logvars).sum() / TOTAL_ENCODED_PERMUTATIONS
+            kl_losses += (
+                kl_loss(mus, logvars).mean(dim=0).sum() / TOTAL_ENCODED_PERMUTATIONS
+            )
 
         # Weight it by config.vae.kl_loss_weight
         kl_losses_weighted = kl_losses * config.vae.kl_loss_weight
@@ -341,7 +346,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             [perm, inv, p, q, r],
         ):
             reconstruction_losses += (
-                permutation_encoder.embedder.nll_loss(decoded, original).sum()
+                permutation_encoder.embedder.nll_loss(decoded, original)
+                .mean(dim=0)
+                .sum()
                 / TOTAL_ENCODED_PERMUTATIONS
             )
         reconstruction_losses_weighted = (
