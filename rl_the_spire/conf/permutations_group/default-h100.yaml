@@ -1,7 +1,7 @@
 dataset:
   n_max_permutation_size: 15  # Increased with respect to default.yaml, GPUs can roar
   gamma: 2.0
-  batch_size: 256
+  batch_size: 128
   num_workers: 2
   prefetch_factor: 2
 encoder:
@@ -10,7 +10,7 @@ encoder:
   n_layers: 8
   attn_dropout: 0.0
   resid_dropout: 0.0
-  dtype: "float16"
+  dtype: "float32"
   device: "cuda"
   init_std: 0.02
   mlp_dropout: 0.0
