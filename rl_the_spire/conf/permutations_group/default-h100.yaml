@@ -23,7 +23,7 @@ encoder:
   linear_size_multiplier: 4
 optimizer:
   lr: 2.0e-4
-  warmup_steps: 300
+  warmup_steps: 1000
   beta1: 0.9
   beta2: 0.999
   weight_decay: 0.01
@@ -36,11 +36,11 @@ inverter_network:
   n_layers: 4
 composer_network:
   n_layers: 6
-iterations: 10000
+iterations: 100000
 eval_interval: 100
 experiment_name: "permutations_group_h100_gpu"  # Updated experiment name
 wandb_enabled: true
-log_interval: 50
+log_interval: 100
 reconstruction_loss_weight: 1.0
 neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
