@@ -173,3 +173,4 @@ cython_debug/
 # RL The Spire
 rl_the_spire/experiments/outputs/
 wandb/
+outputs/
