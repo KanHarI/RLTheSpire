@@ -111,7 +111,6 @@ class PermutationEncoder(torch.nn.Module):
         x = self.transformer_body(x, extra_embed=torch.zeros_like(x[:, :, :1]))
         x = self.attention_to_tensor(x)
         x = self.conv_transformer_block(x)
-        # x: (batch_size, n_output_heads, n_output_rows, n_output_columns, n_output_embed)
         # Turn into (batch_size, n_output_rows, n_output_columns, n_output_embed // 2, 2)
         # For mus, logvars
         x = x.view(
@@ -121,6 +120,6 @@ class PermutationEncoder(torch.nn.Module):
             x.shape[3] // 2,
             2,
         )
-        mus = x[:, :, :, 0]
-        logsigmas = x[:, :, :, 1]
+        mus = x[:, :, :, :, 0]
+        logsigmas = x[:, :, :, :, 1]
         return mus, logsigmas

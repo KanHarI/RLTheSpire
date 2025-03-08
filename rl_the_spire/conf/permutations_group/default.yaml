@@ -17,8 +17,8 @@ encoder:
   ln_eps: 1e-5
   n_output_heads: 1
   n_output_embed: 128
-  n_output_rows: 1
-  n_output_columns: 1
+  n_output_rows: 8
+  n_output_columns: 8
   activation: "gelu"
   linear_size_multiplier: 4
 vae:
