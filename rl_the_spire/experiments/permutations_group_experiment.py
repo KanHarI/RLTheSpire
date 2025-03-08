@@ -22,10 +22,15 @@ from rl_the_spire.datasets.permutation_and_inverse_dataset import (
     PermutationAndInverseDataset,
     PermutationInverseDatasetConfig,
 )
+from rl_the_spire.models.permutations.permutation_decoder import (
+    PermutationDecoder,
+    PermutationDecoderConfig,
+)
 from rl_the_spire.models.permutations.permutation_encoder import (
     PermutationEncoder,
     PermutationEncoderConfig,
 )
+from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
 from rl_the_spire.models.vaes.kl_loss import kl_loss
 
 # Configure logger with timestamp and module name
@@ -122,6 +127,30 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         conv_transformer_n_heads=config.conv_transformer.n_heads,
     )
     permutation_encoder = PermutationEncoder(permutation_encoder_config)
+    permutation_encoder.init_weights()
+
+    logger.info("Creating permutations decoder...")
+    permutations_decoder_config = PermutationDecoderConfig(
+        n_embed_grid=config.encoder.n_output_embed,
+        n_embed_sequence=config.encoder.n_embed,
+        n_grid_rows=config.encoder.n_output_rows,
+        n_grid_columns=config.encoder.n_output_columns,
+        n_max_permutation_size=config.dataset.n_max_permutation_size,
+        n_sequence_layers=config.encoder.n_layers,
+        conv_transformer_n_heads=config.conv_transformer.n_heads,
+        sequence_n_heads=config.encoder.n_heads,
+        linear_size_multiplier=config.encoder.linear_size_multiplier,
+        activation=get_activation(config.encoder.activation),
+        dtype=get_dtype(config.encoder.dtype),
+        device=get_device(config.encoder.device),
+        init_std=config.encoder.init_std,
+        ln_eps=config.encoder.ln_eps,
+        attn_dropout=config.encoder.attn_dropout,
+        resid_dropout=config.encoder.resid_dropout,
+        mlp_dropout=config.encoder.mlp_dropout,
+    )
+    permutations_decoder = PermutationDecoder(permutations_decoder_config)
+    permutations_decoder.init_weights()
 
     # Initialize wandb
     logger.info("Initializing WanDB...")
@@ -144,11 +173,34 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Calculate all KL losses
         kl_losses = torch.tensor(0.0)
-        for (mus, logvars) in zip([encoded_perm_mus, encoded_inv_mus, encoded_p_mus, encoded_q_mus, encoded_r_mus], [encoded_perm_logvars, encoded_inv_logvars, encoded_p_logvars, encoded_q_logvars, encoded_r_logvars]):
+        for mus, logvars in zip(
+            [
+                encoded_perm_mus,
+                encoded_inv_mus,
+                encoded_p_mus,
+                encoded_q_mus,
+                encoded_r_mus,
+            ],
+            [
+                encoded_perm_logvars,
+                encoded_inv_logvars,
+                encoded_p_logvars,
+                encoded_q_logvars,
+                encoded_r_logvars,
+            ],
+        ):
             kl_losses += kl_loss(mus, logvars).sum() / TOTAL_ENCODED_PERMUTATIONS
 
-        print(f"KL Losses: {kl_losses}")
-         
+        sampled_perm = gamma_vae_sample(
+            encoded_perm_mus, encoded_perm_logvars, config.vae.gamma
+        )
+        sampled_inv = gamma_vae_sample(
+            encoded_inv_mus, encoded_inv_logvars, config.vae.gamma
+        )
+        sampled_p = gamma_vae_sample(encoded_p_mus, encoded_p_logvars, config.vae.gamma)
+        sampled_q = gamma_vae_sample(encoded_q_mus, encoded_q_logvars, config.vae.gamma)
+        sampled_r = gamma_vae_sample(encoded_r_mus, encoded_r_logvars, config.vae.gamma)
+
         raise NotImplementedError
 
     return 0

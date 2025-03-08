@@ -11,7 +11,10 @@ from rl_the_spire.models.transformers.attention_to_tensor import (
     AttentionToTensor,
     AttentionToTensorConfig,
 )
-from rl_the_spire.models.transformers.conv_transformer_block import ConvTransformerBlock, ConvTransformerBlockConfig
+from rl_the_spire.models.transformers.conv_transformer_block import (
+    ConvTransformerBlock,
+    ConvTransformerBlockConfig,
+)
 from rl_the_spire.models.transformers.transformer_body import (
     TransformerBody,
     TransformerBodyConfig,
@@ -93,7 +96,7 @@ class PermutationEncoder(torch.nn.Module):
             dtype=config.dtype,
             device=config.device,
             init_std=config.init_std,
-            ln_eps=config.ln_eps
+            ln_eps=config.ln_eps,
         )
         self.conv_transformer_block = ConvTransformerBlock(conv_transfomer_block_config)
 
