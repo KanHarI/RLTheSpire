@@ -119,6 +119,8 @@ class ConvTransformerBlock(nn.Module):
             kernel_size=3,
             padding=1,  # maintain spatial dimensions
             bias=True,
+            device=config.device,
+            dtype=config.dtype,
         )
 
         # MLP for further processing.
