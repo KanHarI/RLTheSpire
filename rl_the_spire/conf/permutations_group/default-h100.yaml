@@ -1,22 +1,22 @@
 dataset:
-  n_max_permutation_size: 5
+  n_max_permutation_size: 15  # Increased with respect to default.yaml, GPUs can roar
   gamma: 2.0
-  batch_size: 256  # Increased batch size for GPU
-  num_workers: 8   # Increased number of workers
-  prefetch_factor: 4  # Increased prefetch factor
+  batch_size: 256
+  num_workers: 2
+  prefetch_factor: 2
 encoder:
-  n_embed: 128
-  n_heads: 4
-  n_layers: 6
+  n_embed: 256
+  n_heads: 8
+  n_layers: 8
   attn_dropout: 0.0
   resid_dropout: 0.0
-  dtype: "float16"  # Using mixed precision for better performance
-  device: "cuda"   # Changed from CPU to CUDA
+  dtype: "float16"
+  device: "cuda"
   init_std: 0.02
   mlp_dropout: 0.0
   ln_eps: 1e-5
-  n_output_heads: 2
-  n_output_embed: 16
+  n_output_heads: 4
+  n_output_embed: 64
   n_output_rows: 8
   n_output_columns: 8
   activation: "gelu"
@@ -27,14 +27,14 @@ vae:
 conv_transformer:
   n_heads: 4
 inverter_network:
-  n_layers: 3
+  n_layers: 4
 composer_network:
-  n_layers: 3
+  n_layers: 6
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_h100_gpu"  # Updated experiment name
 wandb_enabled: true
-log_interval: 20
+log_interval: 50
 reconstruction_loss_weight: 1.0
 neural_inv_perm_loss_weight: 1.0
 neural_comp_perm_loss_weight: 1.0 
