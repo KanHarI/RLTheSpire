@@ -1,6 +1,8 @@
 import dataclasses
 
-from rl_the_spire.conf.permutations_group.permutation_group_composer_network_config import PermutationGroupComposerNetworkConfig
+from rl_the_spire.conf.permutations_group.permutation_group_composer_network_config import (
+    PermutationGroupComposerNetworkConfig,
+)
 from rl_the_spire.conf.permutations_group.permutation_group_conv_transformer_config import (
     PermutationGroupConvTransformerConfig,
 )
@@ -33,3 +35,4 @@ class PermutationGroupExperimentConfig:
     log_interval: int
     reconstruction_loss_weight: float
     neural_inv_perm_loss_weight: float
+    neural_comp_perm_loss_weight: float

@@ -221,6 +221,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         if step % config.eval_interval == 0:
             permutation_encoder.eval()
             permutations_decoder.eval()
+            inverter_network.eval()
+            composer_network.eval()
+
             with torch.no_grad():
                 # Sample new data for evaluation
                 eval_perm, eval_inv = next(inversions_dataloader)
@@ -264,6 +267,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
                 # Inverter
                 neural_inv_perm = inverter_network(samp_perm)
+                neural_comp_perm = composer_network(samp_p, samp_q)
 
                 dec_perm = permutations_decoder(
                     samp_perm, permutation_encoder.embedder.pos_embedding
@@ -283,6 +287,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
                 dec_neural_inv_perm = permutations_decoder(
                     neural_inv_perm, permutation_encoder.embedder.pos_embedding
+                )
+                dec_neural_comp_perm = permutations_decoder(
+                    neural_comp_perm, permutation_encoder.embedder.pos_embedding
                 )
 
                 reconstruction_losses_eval = torch.tensor(0.0)
@@ -309,10 +316,20 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     neural_inv_perm_loss * config.neural_inv_perm_loss_weight
                 )
 
+                neural_comp_perm_loss = (
+                    permutation_encoder.embedder.nll_loss(dec_neural_comp_perm, eval_r)
+                    .mean(dim=0)
+                    .sum()
+                )
+                neural_comp_perm_loss_weighted = (
+                    neural_comp_perm_loss * config.neural_comp_perm_loss_weight
+                )
+
                 total_loss_eval = (
                     kl_losses_eval_weighted
                     + reconstruction_losses_eval_weighted
                     + neural_inv_perm_loss_weighted
+                    + neural_comp_perm_loss_weighted
                 )
 
             # Log eval losses
@@ -324,6 +341,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "eval/kl_loss_weighted": kl_losses_eval_weighted.item(),
                         "eval/reconstruction_loss": reconstruction_losses_eval.item(),
                         "eval/reconstruction_loss_weighted": reconstruction_losses_eval_weighted.item(),
+                        "eval/neural_inv_perm_loss": neural_inv_perm_loss.item(),
+                        "eval/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
+                        "eval/neural_comp_perm_loss": neural_comp_perm_loss.item(),
+                        "eval/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
                     },
                     step=step,
                 )
@@ -333,6 +354,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"kl={kl_losses_eval:.4f}, "
                 f"recon={reconstruction_losses_eval:.4f}, "
                 f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
+                f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
             )
 
         # -------------------
@@ -340,6 +362,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # -------------------
         permutation_encoder.train()
         permutations_decoder.train()
+        inverter_network.train()
+        composer_network.train()
 
         perm, inv = next(inversions_dataloader)
         p, q, r = next(composition_dataloader)
@@ -389,7 +413,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Inverter
         neural_inv_perm = inverter_network(sampled_perm)
-
+        neural_comp_perm = composer_network(sampled_p, sampled_q)
         # Decode
         decoded_perm = permutations_decoder(
             sampled_perm, permutation_encoder.embedder.pos_embedding
@@ -408,6 +432,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         )
         dec_neural_inv_perm = permutations_decoder(
             neural_inv_perm, permutation_encoder.embedder.pos_embedding
+        )
+        dec_neural_comp_perm = permutations_decoder(
+            neural_comp_perm, permutation_encoder.embedder.pos_embedding
         )
 
         # Reconstruction losses (averaged over 5 permutations)
@@ -436,11 +463,21 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             neural_inv_perm_loss * config.neural_inv_perm_loss_weight
         )
 
+        neural_comp_perm_loss = (
+            permutation_encoder.embedder.nll_loss(dec_neural_comp_perm, r)
+            .mean(dim=0)
+            .sum()
+        )
+        neural_comp_perm_loss_weighted = (
+            neural_comp_perm_loss * config.neural_comp_perm_loss_weight
+        )
+
         # Combine total loss
         total_loss = (
             kl_losses_weighted
             + reconstruction_losses_weighted
             + neural_inv_perm_loss_weighted
+            + neural_comp_perm_loss_weighted
         )
 
         # Optimize
@@ -460,6 +497,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
                         "train/neural_inv_perm_loss": neural_inv_perm_loss.item(),
                         "train/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
+                        "train/neural_comp_perm_loss": neural_comp_perm_loss.item(),
+                        "train/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
                     },
                     step=step,
                 )
@@ -468,6 +507,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"kl={kl_losses:.4f}, "
                 f"recon={reconstruction_losses:.4f}, "
                 f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
+                f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
             )
 
     return 0
