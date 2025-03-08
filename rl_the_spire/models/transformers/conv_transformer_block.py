@@ -161,9 +161,6 @@ class ConvTransformerBlock(nn.Module):
         """
         B, N, M, E = x.shape
 
-        print(x.shape)
-        print(self.config.n_embed)
-
         # --- Attention along N dimension ---
         # Normalize and reshape to (B*M, N, E): each column (fixed M) is a sequence of length N.
         x_ln = self.ln_attn_n(x)

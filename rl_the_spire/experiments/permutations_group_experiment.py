@@ -201,6 +201,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         sampled_q = gamma_vae_sample(encoded_q_mus, encoded_q_logvars, config.vae.gamma)
         sampled_r = gamma_vae_sample(encoded_r_mus, encoded_r_logvars, config.vae.gamma)
 
+        logger.info("Decoding permutations...")
         decoded_perm = permutations_decoder(sampled_perm)
         decoded_inv = permutations_decoder(sampled_inv)
         decoded_p = permutations_decoder(sampled_p)
