@@ -392,12 +392,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     target_inv_mus = ep_inv_mus
                     target_r_mus = ep_r_mus
 
-                latent_inv_perm_loss = F.mse_loss(neural_inv_perm, target_inv_mus)
+                # Full L2 norm (not mean)
+                latent_inv_perm_loss = torch.norm(neural_inv_perm - target_inv_mus, p=2)
                 latent_inv_perm_loss_weighted = (
                     latent_inv_perm_loss * config.latent_inv_perm_loss_weight
                 )
 
-                latent_comp_perm_loss = F.mse_loss(neural_comp_perm, target_r_mus)
+                # Full L2 norm (not mean)
+                latent_comp_perm_loss = torch.norm(neural_comp_perm - target_r_mus, p=2)
                 latent_comp_perm_loss_weighted = (
                     latent_comp_perm_loss * config.latent_comp_perm_loss_weight
                 )
@@ -573,12 +575,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             target_inv_mus = encoded_inv_mus
             target_r_mus = encoded_r_mus
 
-        latent_inv_perm_loss = F.mse_loss(neural_inv_perm, target_inv_mus)
+        # Full L2 norm (not mean)
+        latent_inv_perm_loss = torch.norm(neural_inv_perm - target_inv_mus, p=2)
         latent_inv_perm_loss_weighted = (
             latent_inv_perm_loss * config.latent_inv_perm_loss_weight
         )
 
-        latent_comp_perm_loss = F.mse_loss(neural_comp_perm, target_r_mus)
+        # Full L2 norm (not mean)
+        latent_comp_perm_loss = torch.norm(neural_comp_perm - target_r_mus, p=2)
         latent_comp_perm_loss_weighted = (
             latent_comp_perm_loss * config.latent_comp_perm_loss_weight
         )
