@@ -154,8 +154,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     # Initialize wandb
     logger.info("Initializing WanDB...")
-    # wandb.init(project="rl_the_spire.permutations_group", name=config.experiment_name)
-    # wandb.config.update(config)  # type: ignore
+    wandb.init(project="rl_the_spire.permutations_group", name=config.experiment_name)
+    wandb.config.update(config)  # type: ignore
 
     # Run experiment
     logger.info("Running experiment...")
