@@ -1,5 +1,6 @@
 import dataclasses
 
+from rl_the_spire.conf.permutations_group.permutation_group_composer_network_config import PermutationGroupComposerNetworkConfig
 from rl_the_spire.conf.permutations_group.permutation_group_conv_transformer_config import (
     PermutationGroupConvTransformerConfig,
 )
@@ -24,6 +25,7 @@ class PermutationGroupExperimentConfig:
     vae: PermutationGroupVAEConfig
     conv_transformer: PermutationGroupConvTransformerConfig
     inverter_network: PermutationGroupInverterNetworkConfig
+    composer_network: PermutationGroupComposerNetworkConfig
     iterations: int
     eval_interval: int
     experiment_name: str

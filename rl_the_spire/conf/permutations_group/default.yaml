@@ -28,6 +28,8 @@ conv_transformer:
   n_heads: 4
 inverter_network:
   n_layers: 3
+composer_network:
+  n_layers: 3
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"

@@ -22,6 +22,10 @@ from rl_the_spire.datasets.permutation_and_inverse_dataset import (
     PermutationAndInverseDataset,
     PermutationInverseDatasetConfig,
 )
+from rl_the_spire.models.permutations.permutation_composer import (
+    PermutationComposer,
+    PermutationComposerConfig,
+)
 from rl_the_spire.models.permutations.permutation_decoder import (
     PermutationDecoder,
     PermutationDecoderConfig,
@@ -171,10 +175,31 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     )
     inverter_network = ConvTransformerBody(inverter_network_config)
     inverter_network.init_weights()
+
+    composer_network_config = PermutationComposerConfig(
+        n_embed=config.encoder.n_output_embed,
+        n_heads=config.conv_transformer.n_heads,
+        attn_dropout=config.encoder.attn_dropout,
+        resid_dropout=config.encoder.resid_dropout,
+        mlp_dropout=config.encoder.mlp_dropout,
+        linear_size_multiplier=config.encoder.linear_size_multiplier,
+        activation=get_activation(config.encoder.activation),
+        dtype=get_dtype(config.encoder.dtype),
+        device=get_device(config.encoder.device),
+        init_std=config.encoder.init_std,
+        n_layers=config.composer_network.n_layers,
+        ln_eps=config.encoder.ln_eps,
+    )
+    composer_network = PermutationComposer(composer_network_config)
+    composer_network.init_weights()
+
     # 5. Create an optimizer
     logger.info("Creating AdamW optimizer...")
-    params = list(permutation_encoder.parameters()) + list(
-        permutations_decoder.parameters()
+    params = (
+        list(permutation_encoder.parameters())
+        + list(permutations_decoder.parameters())
+        + list(inverter_network.parameters())
+        + list(composer_network.parameters())
     )
     optimizer = torch.optim.AdamW(params, lr=2e-4)
 
