@@ -176,6 +176,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     inverter_network = ConvTransformerBody(inverter_network_config)
     inverter_network.init_weights()
 
+    logger.info("Creating composer network...")
     composer_network_config = PermutationComposerConfig(
         n_embed=config.encoder.n_output_embed,
         n_heads=config.conv_transformer.n_heads,
