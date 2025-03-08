@@ -276,9 +276,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 )
 
                 neural_inv_perm_loss = (
-                    permutation_encoder.embedder.nll_loss(
-                        dec_neural_inv_perm, eval_inv
-                    )
+                    permutation_encoder.embedder.nll_loss(dec_neural_inv_perm, eval_inv)
                     .mean(dim=0)
                     .sum()
                 )
