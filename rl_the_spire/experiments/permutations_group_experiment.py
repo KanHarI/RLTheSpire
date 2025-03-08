@@ -6,7 +6,6 @@ from typing import Any
 import dacite
 import hydra
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import wandb
@@ -599,7 +598,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Optimize
         optimizer.zero_grad()
-        total_loss.backward()  # type: ignore
+        total_loss.backward()
         optimizer.step()
         scheduler.step()
 
