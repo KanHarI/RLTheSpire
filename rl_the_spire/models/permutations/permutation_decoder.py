@@ -120,7 +120,7 @@ class PermutationDecoder(torch.nn.Module):
         self.grid_to_sequence.init_weights()
         self.sequence_transformer.init_weights()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, pos_encodings: torch.Tensor) -> torch.Tensor:
         x = self.grid_transformer(x)
-        x = self.grid_to_sequence(x)
+        x = self.grid_to_sequence(x, pos_encodings)
         return self.sequence_transformer(x)  # type: ignore

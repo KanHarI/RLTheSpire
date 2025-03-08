@@ -1,7 +1,5 @@
 import dataclasses
-
 import torch
-
 
 @dataclasses.dataclass
 class PermutationEmbedderConfig:
@@ -10,7 +8,6 @@ class PermutationEmbedderConfig:
     dtype: torch.dtype
     device: torch.device
     init_std: float
-
 
 class PermutationEmbedder(torch.nn.Module):
     def __init__(self, config: PermutationEmbedderConfig) -> None:
@@ -25,46 +22,57 @@ class PermutationEmbedder(torch.nn.Module):
                 requires_grad=True,
             )
         )
+        # Learned positional encodings for positions [0, ..., n_max_permutation_size-1].
+        self.pos_embedding = torch.nn.Parameter(
+            torch.zeros(
+                config.n_max_permutation_size,
+                config.n_embed,
+                dtype=config.dtype,
+                device=config.device,
+                requires_grad=True,
+            )
+        )
 
     def init_weights(self) -> None:
         torch.nn.init.normal_(self.c_perm, std=self.config.init_std)
+        torch.nn.init.normal_(self.pos_embedding, std=self.config.init_std)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x: (batch_size, n_max_permutation_size) - indices of the permutation
-        returns: (batch_size, n_max_permutation_size, n_embed)
+        Args:
+            x (torch.Tensor): (batch_size, n_max_permutation_size) - indices of the permutation.
+        
+        Returns:
+            torch.Tensor: (batch_size, n_max_permutation_size, n_embed) - candidate embeddings with added
+                          learned positional encodings.
         """
-        return self.c_perm[x]
+        # Lookup candidate embeddings based on the permutation indices.
+        embeddings = self.c_perm[x]  # shape: (B, n_max_permutation_size, n_embed)
+        # Add the learned positional encoding (broadcast along batch dimension).
+        pos_enc = self.pos_embedding.unsqueeze(0)  # shape: (1, n_max_permutation_size, n_embed)
+        return embeddings + pos_enc
 
     def get_logprobs(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x: (batch_size, n_max_permutation_size, n_embed) - reconstructed embeddings
-        returns: (batch_size, n_max_permutation_size, n_max_permutation_size) - log probabilities of the permutation
+        Args:
+            x (torch.Tensor): (batch_size, n_max_permutation_size, n_embed) - reconstructed embeddings.
+        
+        Returns:
+            torch.Tensor: (batch_size, n_max_permutation_size, n_max_permutation_size) - log probabilities.
         """
-        # Compute logits by taking the dot product between each reconstructed embedding and all candidate embeddings
-        # Resulting shape: (batch_size, n_max_permutation_size, n_max_permutation_size)
         logits = torch.matmul(x, self.c_perm.t())
-
-        # Convert logits to log probabilities using softmax over the candidate dimension (last dimension)
         return torch.nn.functional.log_softmax(logits, dim=-1)
 
     def nll_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
-        x: (batch_size, n_max_permutation_size, n_embed) - reconstructed embeddings
-        y: (batch_size, n_max_permutation_size) - target permutation
-        returns: (batch_size,) - negative log likelihood loss
+        Args:
+            x (torch.Tensor): (batch_size, n_max_permutation_size, n_embed) - reconstructed embeddings.
+            y (torch.Tensor): (batch_size, n_max_permutation_size) - target permutation.
+        
+        Returns:
+            torch.Tensor: (batch_size,) - negative log likelihood loss.
         """
-        # Get the log probabilities from the reconstructed embeddings
-        # log_probs shape: (batch_size, n_max_permutation_size, n_max_permutation_size)
         log_probs = self.get_logprobs(x)
-
-        # Gather the log probability corresponding to the target indices for each position.
-        # y.unsqueeze(2) has shape: (batch_size, n_max_permutation_size, 1)
-        # target_log_probs shape: (batch_size, n_max_permutation_size, 1) -> squeeze to (batch_size, n_max_permutation_size)
-        target_log_probs = torch.gather(log_probs, dim=2, index=y.unsqueeze(2)).squeeze(
-            2
-        )
-
-        # Compute the negative log likelihood loss per batch by summing over positions.
+        target_log_probs = torch.gather(log_probs, dim=2, index=y.unsqueeze(2)).squeeze(2)
         loss = -target_log_probs.sum(dim=1)
         return loss
