@@ -70,7 +70,7 @@ class PermutationEncoder(torch.nn.Module):
         self.transformer_body = TransformerBody(transformer_body_config)
         attention_to_tensor_config = AttentionToTensorConfig(
             n_embed=config.n_embed,
-            n_output_embed=config.n_output_embed,
+            n_output_embed=config.n_output_embed * 2,  # For mus and logvars
             n_output_rows=config.n_output_rows,
             n_output_columns=config.n_output_columns,
             n_heads=config.n_output_heads,
@@ -83,7 +83,7 @@ class PermutationEncoder(torch.nn.Module):
         )
         self.attention_to_tensor = AttentionToTensor(attention_to_tensor_config)
         conv_transfomer_block_config = ConvTransformerBlockConfig(
-            n_embed=config.n_output_embed,
+            n_embed=config.n_output_embed * 2,  # For mus and logvars
             n_heads=config.conv_transformer_n_heads,
             attn_dropout=config.attn_dropout,
             resid_dropout=config.resid_dropout,

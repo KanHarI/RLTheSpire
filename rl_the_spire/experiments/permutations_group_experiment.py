@@ -4,6 +4,7 @@ from typing import Any
 
 import dacite
 import hydra
+import torch
 import wandb
 from torch.utils.data import DataLoader
 
@@ -25,6 +26,7 @@ from rl_the_spire.models.permutations.permutation_encoder import (
     PermutationEncoder,
     PermutationEncoderConfig,
 )
+from rl_the_spire.models.vaes.kl_loss import kl_loss
 
 # Configure logger with timestamp and module name
 logging.basicConfig(
@@ -140,6 +142,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         encoded_q_mus, encoded_q_logvars = permutation_encoder(q)
         encoded_r_mus, encoded_r_logvars = permutation_encoder(r)
 
+        # Calculate all KL losses
+        kl_losses = torch.tensor(0.0)
+        for (mus, logvars) in zip([encoded_perm_mus, encoded_inv_mus, encoded_p_mus, encoded_q_mus, encoded_r_mus], [encoded_perm_logvars, encoded_inv_logvars, encoded_p_logvars, encoded_q_logvars, encoded_r_logvars]):
+            kl_losses += kl_loss(mus, logvars).sum() / TOTAL_ENCODED_PERMUTATIONS
+
+        print(f"KL Losses: {kl_losses}")
+         
         raise NotImplementedError
 
     return 0
