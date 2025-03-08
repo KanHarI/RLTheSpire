@@ -30,6 +30,10 @@ from rl_the_spire.models.permutations.permutation_encoder import (
     PermutationEncoder,
     PermutationEncoderConfig,
 )
+from rl_the_spire.models.transformers.conv_transformer_body import (
+    ConvTransformerBody,
+    ConvTransformerBodyConfig,
+)
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
 from rl_the_spire.models.vaes.kl_loss import kl_loss
 
@@ -150,6 +154,23 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     permutations_decoder = PermutationDecoder(permutations_decoder_config)
     permutations_decoder.init_weights()
 
+    logger.info("Creating inverter network...")
+    inverter_network_config = ConvTransformerBodyConfig(
+        n_blocks=config.inverter_network.n_layers,
+        n_embed=config.encoder.n_output_embed,
+        n_heads=config.conv_transformer.n_heads,
+        attn_dropout=config.encoder.attn_dropout,
+        resid_dropout=config.encoder.resid_dropout,
+        mlp_dropout=config.encoder.mlp_dropout,
+        linear_size_multiplier=config.encoder.linear_size_multiplier,
+        activation=get_activation(config.encoder.activation),
+        dtype=get_dtype(config.encoder.dtype),
+        device=get_device(config.encoder.device),
+        init_std=config.encoder.init_std,
+        ln_eps=config.encoder.ln_eps,
+    )
+    inverter_network = ConvTransformerBody(inverter_network_config)
+    inverter_network.init_weights()
     # 5. Create an optimizer
     logger.info("Creating AdamW optimizer...")
     params = list(permutation_encoder.parameters()) + list(
@@ -216,6 +237,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 samp_q = gamma_vae_sample(ep_q_mus, ep_q_logvars, config.vae.gamma)
                 samp_r = gamma_vae_sample(ep_r_mus, ep_r_logvars, config.vae.gamma)
 
+                # Inverter
+                neural_inv_perm = inverter_network(samp_perm)
+
                 dec_perm = permutations_decoder(
                     samp_perm, permutation_encoder.embedder.pos_embedding
                 )
@@ -230,6 +254,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 )
                 dec_r = permutations_decoder(
                     samp_r, permutation_encoder.embedder.pos_embedding
+                )
+
+                dec_neural_inv_perm = permutations_decoder(
+                    neural_inv_perm, permutation_encoder.embedder.pos_embedding
                 )
 
                 reconstruction_losses_eval = torch.tensor(0.0)
@@ -247,8 +275,21 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     reconstruction_losses_eval * config.reconstruction_loss_weight
                 )
 
+                neural_inv_perm_loss = (
+                    permutation_encoder.embedder.nll_loss(
+                        dec_neural_inv_perm, eval_inv
+                    )
+                    .mean(dim=0)
+                    .sum()
+                )
+                neural_inv_perm_loss_weighted = (
+                    neural_inv_perm_loss * config.neural_inv_perm_loss_weight
+                )
+
                 total_loss_eval = (
-                    kl_losses_eval_weighted + reconstruction_losses_eval_weighted
+                    kl_losses_eval_weighted
+                    + reconstruction_losses_eval_weighted
+                    + neural_inv_perm_loss_weighted
                 )
 
             # Log eval losses
@@ -267,7 +308,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             logger.info(
                 f"[Eval step {step}] total={total_loss_eval:.4f}, "
                 f"kl={kl_losses_eval:.4f}, "
-                f"recon={reconstruction_losses_eval:.4f}"
+                f"recon={reconstruction_losses_eval:.4f}, "
+                f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
             )
 
         # -------------------
@@ -322,6 +364,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         sampled_q = gamma_vae_sample(encoded_q_mus, encoded_q_logvars, config.vae.gamma)
         sampled_r = gamma_vae_sample(encoded_r_mus, encoded_r_logvars, config.vae.gamma)
 
+        # Inverter
+        neural_inv_perm = inverter_network(sampled_perm)
+
         # Decode
         decoded_perm = permutations_decoder(
             sampled_perm, permutation_encoder.embedder.pos_embedding
@@ -337,6 +382,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         )
         decoded_r = permutations_decoder(
             sampled_r, permutation_encoder.embedder.pos_embedding
+        )
+        dec_neural_inv_perm = permutations_decoder(
+            neural_inv_perm, permutation_encoder.embedder.pos_embedding
         )
 
         # Reconstruction losses (averaged over 5 permutations)
@@ -355,8 +403,22 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             reconstruction_losses * config.reconstruction_loss_weight
         )
 
+        neural_inv_perm_loss = (
+            permutation_encoder.embedder.nll_loss(dec_neural_inv_perm, inv)
+            .mean(dim=0)
+            .sum()
+        )
+
+        neural_inv_perm_loss_weighted = (
+            neural_inv_perm_loss * config.neural_inv_perm_loss_weight
+        )
+
         # Combine total loss
-        total_loss = kl_losses_weighted + reconstruction_losses_weighted
+        total_loss = (
+            kl_losses_weighted
+            + reconstruction_losses_weighted
+            + neural_inv_perm_loss_weighted
+        )
 
         # Optimize
         optimizer.zero_grad()
@@ -373,13 +435,16 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/kl_loss_weighted": kl_losses_weighted.item(),
                         "train/reconstruction_loss": reconstruction_losses.item(),
                         "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
+                        "train/neural_inv_perm_loss": neural_inv_perm_loss.item(),
+                        "train/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
                     },
                     step=step,
                 )
             logger.info(
                 f"[Train step {step}] total={total_loss:.4f}, "
                 f"kl={kl_losses:.4f}, "
-                f"recon={reconstruction_losses:.4f}"
+                f"recon={reconstruction_losses:.4f}, "
+                f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
             )
 
     return 0

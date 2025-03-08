@@ -9,6 +9,9 @@ from rl_the_spire.conf.permutations_group.permutation_group_dataset_config impor
 from rl_the_spire.conf.permutations_group.permutation_group_encoder_config import (
     PermutationGroupEncoderConfig,
 )
+from rl_the_spire.conf.permutations_group.permutation_group_inverter_network_config import (
+    PermutationGroupInverterNetworkConfig,
+)
 from rl_the_spire.conf.permutations_group.permutation_group_vae_config import (
     PermutationGroupVAEConfig,
 )
@@ -20,9 +23,11 @@ class PermutationGroupExperimentConfig:
     encoder: PermutationGroupEncoderConfig
     vae: PermutationGroupVAEConfig
     conv_transformer: PermutationGroupConvTransformerConfig
+    inverter_network: PermutationGroupInverterNetworkConfig
     iterations: int
     eval_interval: int
     experiment_name: str
     wandb_enabled: bool
     log_interval: int
     reconstruction_loss_weight: float
+    neural_inv_perm_loss_weight: float
