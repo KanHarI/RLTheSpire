@@ -7,9 +7,9 @@ import dacite
 import hydra
 import torch
 import torch.nn.functional as F
-import wandb
 from torch.utils.data import DataLoader
 
+import wandb
 from rl_the_spire.conf.permutations_group.permutation_group_experiment_config import (
     PermutationGroupExperimentConfig,
 )
