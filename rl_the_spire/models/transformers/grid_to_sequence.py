@@ -1,13 +1,14 @@
 import dataclasses
+import logging
 import math
 from typing import Callable
 
 import torch
-import torch.nn as nn
 
 # Assuming MLP and MLPConfig are defined elsewhere following similar conventions.
 from rl_the_spire.models.common.mlp import MLP, MLPConfig
 
+logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class GridToSequenceConfig:
@@ -32,7 +33,6 @@ class GridToSequenceConfig:
 
     grid_n_embed: int
     seq_n_embed: int
-    n_pos_embed: int
     n_heads: int
     attn_dropout: float
     resid_dropout: float
@@ -45,7 +45,7 @@ class GridToSequenceConfig:
     ln_eps: float = 1e-5
 
 
-class GridToSequence(nn.Module):
+class GridToSequence(torch.nn.Module):
     """
     Transforms grid features of shape (B, N, M, grid_n_embed) together with query positional embeddings
     of shape (B, L, n_pos_embed) into a sequence representation of shape (B, L, seq_n_embed)
@@ -58,149 +58,88 @@ class GridToSequence(nn.Module):
     def __init__(self, config: GridToSequenceConfig):
         super().__init__()
         self.config = config
-        grid_d = config.grid_n_embed
-        seq_d = config.seq_n_embed
-        H = config.n_heads
-        self.head_size = seq_d // H
 
-        # Query projection: from (n_pos_embed) -> (seq_n_embed)
-        self.query_proj = nn.Parameter(
-            torch.zeros(
-                (config.n_pos_embed, seq_d),
-                dtype=config.dtype,
-                device=config.device,
-                requires_grad=True,
-            )
-        )
-        # Key projection: from (grid_n_embed) -> (seq_n_embed)
-        self.key_proj = nn.Parameter(
-            torch.zeros(
-                (grid_d, seq_d),
-                dtype=config.dtype,
-                device=config.device,
-                requires_grad=True,
-            )
-        )
-        # Value projection: from (grid_n_embed) -> (seq_n_embed)
-        self.value_proj = nn.Parameter(
-            torch.zeros(
-                (grid_d, seq_d),
-                dtype=config.dtype,
-                device=config.device,
-                requires_grad=True,
-            )
-        )
-        # Output projection: from (seq_n_embed) -> (seq_n_embed)
-        self.out_proj = nn.Parameter(
-            torch.zeros(
-                (seq_d, seq_d),
-                dtype=config.dtype,
-                device=config.device,
-                requires_grad=True,
-            )
-        )
-
-        # MLP for post-attention processing.
-        self.mlp_config = MLPConfig(
-            n_in=seq_d,
-            n_out=seq_d,
+        sequence_to_q_mlp_config = MLPConfig(
+            n_in=config.seq_n_embed,
+            n_out=config.seq_n_embed,
             linear_size_multiplier=config.linear_size_multiplier,
             activation=config.activation,
-            dropout=config.mlp_dropout,
             dtype=config.dtype,
             device=config.device,
             init_std=config.init_std,
+            dropout=config.mlp_dropout,
         )
-        self.mlp = MLP(self.mlp_config)
+        self.sequence_to_q_mlp = MLP(sequence_to_q_mlp_config)
 
-        # Dropout modules.
-        self.attn_dropout = nn.Dropout(config.attn_dropout)
-        self.resid_dropout = nn.Dropout(config.resid_dropout)
-
-        # Layer normalizations.
-        self.ln_grid = nn.LayerNorm(
-            seq_d, eps=config.ln_eps, device=config.device, dtype=config.dtype
+        self.grid_to_kv_proj = torch.nn.Parameter(
+            torch.zeros(
+                (config.grid_n_embed, config.seq_n_embed * 2),
+                dtype=config.dtype,
+                device=config.device,
+                requires_grad=True,
+            )
         )
-        self.ln_query = nn.LayerNorm(
-            config.n_pos_embed,
-            eps=config.ln_eps,
-            device=config.device,
-            dtype=config.dtype,
+        self.grid_to_kv_proj_bias = torch.nn.Parameter(
+            torch.zeros(
+                (config.seq_n_embed * 2,),
+                dtype=config.dtype,
+                device=config.device,
+                requires_grad=True,
+            )
         )
-        self.ln_mlp = nn.LayerNorm(
-            seq_d, eps=config.ln_eps, device=config.device, dtype=config.dtype
+        self.c_proj = torch.nn.Parameter(
+            torch.zeros(
+                (config.seq_n_embed, config.seq_n_embed),
+                dtype=config.dtype,
+                device=config.device,
+                requires_grad=True,
+            )
         )
+        self.attn_dropout = torch.nn.Dropout(config.attn_dropout)
+        self.resid_dropout = torch.nn.Dropout(config.resid_dropout)
+        self.head_size = config.seq_n_embed // config.n_heads
+        self.inv_sqrt_head_size = 1.0 / math.sqrt(self.head_size)
+        self.flash = hasattr(torch.nn.functional, "scaled_dot_product_attention")
+        if not self.flash:
+            logger.warning("WARNING: flash attention not available, using regular attention")
 
     def init_weights(self) -> None:
-        """
-        Initialize learned parameters with a normal distribution using init_std.
-        """
-        torch.nn.init.normal_(self.query_proj, std=self.config.init_std)
-        torch.nn.init.normal_(self.key_proj, std=self.config.init_std)
-        torch.nn.init.normal_(self.value_proj, std=self.config.init_std)
-        torch.nn.init.normal_(self.out_proj, std=self.config.init_std)
-        self.mlp.init_weights()
+        torch.nn.init.normal_(self.grid_to_kv_proj, std=self.config.init_std)
+        torch.nn.init.normal_(self.grid_to_kv_proj_bias, std=self.config.init_std)
+        torch.nn.init.normal_(self.c_proj, std=self.config.init_std)
 
-    def forward(self, grid: torch.Tensor, query_pos: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            grid (torch.Tensor): Grid features of shape (B, N, M, grid_n_embed).
-            query_pos (torch.Tensor): Positional embeddings of shape (B, L, n_pos_embed).
+    def forward(self, x: torch.Tensor, pos_encodings: torch.Tensor) -> torch.Tensor:
+        *B, R, C, Eg = x.shape
+        *_, L, Es = pos_encodings.shape
+        
+        # Flatten grid dimensions
+        x = x.reshape(*B, R * C, Eg)
 
-        Returns:
-            torch.Tensor: Output sequence of shape (B, L, seq_n_embed).
-        """
-        B, N, M, _ = grid.shape
-        # Flatten grid to shape (B, N*M, grid_n_embed) and project to sequence space.
-        grid_flat = grid.view(B, N * M, self.config.grid_n_embed)
-        # We first project the grid tokens into the sequence space using key/value projections.
-        # Here we apply layer normalization on the grid after projecting it to seq_n_embed.
-        # Compute keys and values from the grid.
-        grid_norm = self.ln_grid(
-            torch.einsum("btd,de->bte", grid_flat, self.key_proj)
-        )  # Now shape is (B, N*M, seq_n_embed)
-        K = grid_norm  # Keys are already in seq_n_embed
-        V = torch.einsum(
-            "btd,de->bte", grid_flat, self.value_proj
-        )  # (B, N*M, seq_n_embed)
+        x = torch.einsum("...gi,ij->...gj", x, self.grid_to_kv_proj) + self.grid_to_kv_proj_bias
+        k, v = x.split(self.config.seq_n_embed, dim=-1)
+        q = pos_encodings + self.sequence_to_q_mlp(pos_encodings)
 
-        # Process queries: normalize and project.
-        query_norm = self.ln_query(query_pos)  # (B, L, n_pos_embed)
-        Q = torch.einsum(
-            "bld,de->ble", query_norm, self.query_proj
-        )  # (B, L, seq_n_embed)
+        q = q.reshape(*B, L, self.config.n_heads, self.head_size).transpose(1, 2)
+        k = k.reshape(*B, R * C, self.config.n_heads, self.head_size).transpose(1, 2)
+        v = v.reshape(*B, R * C, self.config.n_heads, self.head_size).transpose(1, 2)
 
-        # Reshape Q, K, V to multi-head format.
-        H = self.config.n_heads
-        seq_d = self.config.seq_n_embed
-        head_size = self.head_size
-        Q = Q.view(B, -1, H, head_size).transpose(1, 2)  # (B, H, L, head_size)
-        K = K.view(B, -1, H, head_size).transpose(1, 2)  # (B, H, N*M, head_size)
-        V = V.view(B, -1, H, head_size).transpose(1, 2)  # (B, H, N*M, head_size)
+        if self.flash:
+            out = torch.nn.functional.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=None,
+                dropout_p=self.config.attn_dropout if self.training else 0.0,
+            )
+        else:
+            att = (q @ k.transpose(-2, -1)) * self.inv_sqrt_head_size
+            att = torch.nn.functional.softmax(att, dim=-1)
+            att = self.attn_dropout(att)
+            out = att @ v
 
-        # Scaled dot-product attention.
-        scale = 1.0 / math.sqrt(head_size)
-        attn_scores = torch.einsum("bhld,bhmd->bhlm", Q, K) * scale  # (B, H, L, N*M)
-        attn_probs = torch.softmax(attn_scores, dim=-1)
-        attn_probs = self.attn_dropout(attn_probs)
-        attn_output = torch.einsum(
-            "bhlm,bhmd->bhld", attn_probs, V
-        )  # (B, H, L, head_size)
-        attn_output = (
-            attn_output.transpose(1, 2).contiguous().view(B, -1, seq_d)
-        )  # (B, L, seq_d)
+        out = out.transpose(1, 2).contiguous().view(*B, L, self.config.seq_n_embed)
+        out = pos_encodings + self.resid_dropout(torch.einsum("...ti,ij->...tj", (out, self.c_proj)))
+        return out
 
-        # Output projection.
-        attn_output = torch.einsum("bld,de->ble", attn_output, self.out_proj)
-        attn_output = self.resid_dropout(attn_output)
 
-        # Residual connection: add the projected queries.
-        Q_proj = torch.einsum("bld,de->ble", query_norm, self.query_proj)
-        x = Q_proj + attn_output
 
-        # MLP stage.
-        x_norm = self.ln_mlp(x)
-        mlp_out = self.mlp(x_norm)
-        x = x + self.resid_dropout(mlp_out)
-
-        return x

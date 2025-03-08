@@ -108,7 +108,7 @@ class PermutationEncoder(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.embedder(x)
-        x = self.transformer_body(x, extra_embed=torch.zeros_like(x[:, :, :1]))
+        x = self.transformer_body(x, extra_embed=torch.zeros_like(x[:, :, :0]))
         x = self.attention_to_tensor(x)
         x = self.conv_transformer_block(x)
         # Turn into (batch_size, n_output_rows, n_output_columns, n_output_embed // 2, 2)

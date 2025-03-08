@@ -82,7 +82,6 @@ class PermutationDecoder(torch.nn.Module):
         grid_to_sequence_config = GridToSequenceConfig(
             grid_n_embed=config.n_embed_grid,
             seq_n_embed=config.n_embed_grid,
-            n_pos_embed=config.n_embed_grid,
             n_heads=config.conv_transformer_n_heads,
             attn_dropout=config.attn_dropout,
             resid_dropout=config.resid_dropout,
@@ -122,5 +121,6 @@ class PermutationDecoder(torch.nn.Module):
 
     def forward(self, x: torch.Tensor, pos_encodings: torch.Tensor) -> torch.Tensor:
         x = self.grid_transformer(x)
-        x = self.grid_to_sequence(x, pos_encodings)
-        return self.sequence_transformer(x)  # type: ignore
+        # Broadcast pos_encoding from (L, E) to (B, L, E)
+        x = self.grid_to_sequence(x, pos_encodings.unsqueeze(0).expand(x.shape[0], -1, -1))
+        return self.sequence_transformer(x, extra_embed=torch.zeros_like(x[:, :, :0]))  # type: ignore

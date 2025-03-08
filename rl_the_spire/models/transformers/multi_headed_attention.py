@@ -1,8 +1,10 @@
 import dataclasses
+import logging
 import math
 
 import torch.nn
 
+logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class MultiHeadedAttentionConfig:
@@ -52,7 +54,7 @@ class MultiHeadedAttention(torch.nn.Module):
         self.inv_sqrt_head_size = 1.0 / math.sqrt(self.head_size)
         self.flash = hasattr(torch.nn.functional, "scaled_dot_product_attention")
         if not self.flash:
-            print("WARNING: flash attention not available, using regular attention")
+            logger.warning("WARNING: flash attention not available, using regular attention")
 
     def init_weights(self) -> None:
         torch.nn.init.normal_(self.c_attn, std=self.config.init_std)
