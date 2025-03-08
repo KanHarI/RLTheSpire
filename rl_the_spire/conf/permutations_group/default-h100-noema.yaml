@@ -1,0 +1,52 @@
+dataset:
+  n_max_permutation_size: 15  # Increased with respect to default.yaml, GPUs can roar
+  gamma: 2.0
+  batch_size: 128
+  num_workers: 2
+  prefetch_factor: 2
+encoder:
+  n_embed: 256
+  n_heads: 8
+  n_layers: 8
+  attn_dropout: 0.0
+  resid_dropout: 0.0
+  dtype: "float32"
+  device: "cuda"
+  init_std: 0.02
+  mlp_dropout: 0.0
+  ln_eps: 1e-5
+  n_output_heads: 4
+  n_output_embed: 64
+  n_output_rows: 8
+  n_output_columns: 8
+  activation: "gelu"
+  linear_size_multiplier: 4
+optimizer:
+  lr: 1.0e-4
+  warmup_steps: 2000
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: 0.01
+vae:
+  gamma: 0.5
+  kl_loss_weight: 0.01
+  kl_warmup_steps: 20000
+  kl_warmup_start_weight: 0.0
+conv_transformer:
+  n_heads: 4
+inverter_network:
+  n_layers: 4
+composer_network:
+  n_layers: 6
+iterations: 100000
+eval_interval: 100
+experiment_name: "permutations_group_h100_gpu_no_ema"  # Updated experiment name
+wandb_enabled: true
+log_interval: 100
+reconstruction_loss_weight: 1.0
+neural_inv_perm_loss_weight: 0.5
+neural_comp_perm_loss_weight: 0.5
+latent_inv_perm_loss_weight: 0.01
+latent_comp_perm_loss_weight: 0.01
+use_ema_target: false
+ema_tau: 0.005
