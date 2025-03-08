@@ -194,6 +194,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     composer_network = PermutationComposer(composer_network_config)
     composer_network.init_weights()
 
+    # Explicitly ensure all model parameters are using the specified dtype and device
+    device = get_device(config.encoder.device)
+    dtype = get_dtype(config.encoder.dtype)
+
     # 5. Create an optimizer
     logger.info("Creating AdamW optimizer...")
     params = (
@@ -230,6 +234,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 eval_perm, eval_inv = next(inversions_dataloader)
                 eval_p, eval_q, eval_r = next(composition_dataloader)
 
+                # Convert input tensors to the right device - keep as long for inputs
+                eval_perm = eval_perm.to(device)
+                eval_inv = eval_inv.to(device)
+                eval_p = eval_p.to(device)
+                eval_q = eval_q.to(device)
+                eval_r = eval_r.to(device)
+
                 # Forward pass
                 ep_perm_mus, ep_perm_logvars = permutation_encoder(eval_perm)
                 ep_inv_mus, ep_inv_logvars = permutation_encoder(eval_inv)
@@ -237,7 +248,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 ep_q_mus, ep_q_logvars = permutation_encoder(eval_q)
                 ep_r_mus, ep_r_logvars = permutation_encoder(eval_r)
 
-                kl_losses_eval = torch.tensor(0.0)
+                kl_losses_eval = torch.tensor(0.0, device=device, dtype=dtype)
                 for mus, logvars in zip(
                     [ep_perm_mus, ep_inv_mus, ep_p_mus, ep_q_mus, ep_r_mus],
                     [
@@ -293,7 +304,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     neural_comp_perm, permutation_encoder.embedder.pos_embedding
                 )
 
-                reconstruction_losses_eval = torch.tensor(0.0)
+                reconstruction_losses_eval = torch.tensor(
+                    0.0, device=device, dtype=dtype
+                )
                 for dec, orig in zip(
                     [dec_perm, dec_inv, dec_p, dec_q, dec_r],
                     [eval_perm, eval_inv, eval_p, eval_q, eval_r],
@@ -369,6 +382,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         perm, inv = next(inversions_dataloader)
         p, q, r = next(composition_dataloader)
 
+        # Convert input tensors to the right device - keep as long for inputs
+        perm = perm.to(device)
+        inv = inv.to(device)
+        p = p.to(device)
+        q = q.to(device)
+        r = r.to(device)
+
         # Forward pass
         encoded_perm_mus, encoded_perm_logvars = permutation_encoder(perm)
         encoded_inv_mus, encoded_inv_logvars = permutation_encoder(inv)
@@ -377,7 +397,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         encoded_r_mus, encoded_r_logvars = permutation_encoder(r)
 
         # KL loss (averaged over the 5 permutations)
-        kl_losses = torch.tensor(0.0)
+        kl_losses = torch.tensor(0.0, device=device, dtype=dtype)
         for mus, logvars in zip(
             [
                 encoded_perm_mus,
@@ -439,7 +459,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         )
 
         # Reconstruction losses (averaged over 5 permutations)
-        reconstruction_losses = torch.tensor(0.0)
+        reconstruction_losses = torch.tensor(0.0, device=device, dtype=dtype)
         for decoded, original in zip(
             [decoded_perm, decoded_inv, decoded_p, decoded_q, decoded_r],
             [perm, inv, p, q, r],
