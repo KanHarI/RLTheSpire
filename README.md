@@ -1,6 +1,6 @@
 # RLTheSpire
 
-A neural network project for reinforcement learning experiments with permutation groups.
+A neural network project for reinforcement learning experiments towards learning to play Slay the Spire.
 
 ## Installation
 
@@ -20,6 +20,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```bash
 ./build_lint_and_test.sh
 ```
+
+# Permutations Group Neural Network
 
 ## Configuration
 
