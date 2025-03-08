@@ -207,7 +207,23 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         decoded_q = permutations_decoder(sampled_q, permutation_encoder.embedder.pos_embedding)
         decoded_r = permutations_decoder(sampled_r, permutation_encoder.embedder.pos_embedding)
 
-        raise NotImplementedError
+        # Calculate reconstruction losses
+        reconstruction_losses = torch.tensor(0.0)
+        for decoded, original in zip(
+            [decoded_perm, decoded_inv, decoded_p, decoded_q, decoded_r],
+            [perm, inv, p, q, r],
+        ):
+            reconstruction_losses += permutation_encoder.embedder.nll_loss(decoded, original).sum() / TOTAL_ENCODED_PERMUTATIONS
+        
+        # Calculate total loss
+        total_loss = kl_losses + reconstruction_losses
+
+        # Log total loss
+        logger.info(f"Total loss: {total_loss.item()}")
+        logger.info(f"KL loss: {kl_losses.item()}")
+        logger.info(f"Reconstruction loss: {reconstruction_losses.item()}")
+
+        raise NotImplementedError("Not implemented")
 
     return 0
 
