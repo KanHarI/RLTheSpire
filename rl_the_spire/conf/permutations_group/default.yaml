@@ -33,7 +33,7 @@ composer_network:
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"
-wandb_enabled: false
+wandb_enabled: true
 log_interval: 20
 reconstruction_loss_weight: 1.0
 neural_inv_perm_loss_weight: 1.0
