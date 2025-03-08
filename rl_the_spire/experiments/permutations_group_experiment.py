@@ -204,6 +204,24 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     composer_network = PermutationComposer(composer_network_config)
     composer_network.init_weights()
 
+    logger.info("Creating live to target adapter...")
+    live_to_target_adapter_config = ConvTransformerBodyConfig(
+        n_blocks=1,
+        n_embed=config.encoder.n_output_embed,
+        n_heads=config.conv_transformer.n_heads,
+        attn_dropout=config.encoder.attn_dropout,
+        resid_dropout=config.encoder.resid_dropout,
+        mlp_dropout=config.encoder.mlp_dropout,
+        linear_size_multiplier=config.encoder.linear_size_multiplier,
+        activation=get_activation(config.encoder.activation),
+        dtype=get_dtype(config.encoder.dtype),
+        device=get_device(config.encoder.device),
+        init_std=config.encoder.init_std,
+        ln_eps=config.encoder.ln_eps,
+    )
+    live_to_target_adapter = ConvTransformerBody(live_to_target_adapter_config)
+    live_to_target_adapter.init_weights()
+
     # Explicitly ensure all model parameters are using the specified dtype and device
     device = get_device(config.encoder.device)
     dtype = get_dtype(config.encoder.dtype)
@@ -215,6 +233,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         + list(permutations_decoder.parameters())
         + list(inverter_network.parameters())
         + list(composer_network.parameters())
+        + list(live_to_target_adapter.parameters())
     )
     optimizer = torch.optim.AdamW(
         params,
@@ -392,13 +411,17 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     target_r_mus = ep_r_mus
 
                 # Full L2 norm (not mean)
-                latent_inv_perm_loss = torch.norm(neural_inv_perm - target_inv_mus, p=2)
+                latent_inv_perm_loss = torch.norm(
+                    live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
+                )
                 latent_inv_perm_loss_weighted = (
                     latent_inv_perm_loss * config.latent_inv_perm_loss_weight
                 )
 
                 # Full L2 norm (not mean)
-                latent_comp_perm_loss = torch.norm(neural_comp_perm - target_r_mus, p=2)
+                latent_comp_perm_loss = torch.norm(
+                    live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
+                )
                 latent_comp_perm_loss_weighted = (
                     latent_comp_perm_loss * config.latent_comp_perm_loss_weight
                 )
@@ -427,7 +450,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "eval/neural_comp_perm_loss": neural_comp_perm_loss.item(),
                         "eval/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
                         "eval/latent_inv_perm_loss": latent_inv_perm_loss.item(),
+                        "eval/latent_inv_perm_loss_weighted": latent_inv_perm_loss_weighted.item(),
                         "eval/latent_comp_perm_loss": latent_comp_perm_loss.item(),
+                        "eval/latent_comp_perm_loss_weighted": latent_comp_perm_loss_weighted.item(),
                     },
                     step=step,
                 )
@@ -575,13 +600,17 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             target_r_mus = encoded_r_mus
 
         # Full L2 norm (not mean)
-        latent_inv_perm_loss = torch.norm(neural_inv_perm - target_inv_mus, p=2)
+        latent_inv_perm_loss = torch.norm(
+            live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
+        )
         latent_inv_perm_loss_weighted = (
             latent_inv_perm_loss * config.latent_inv_perm_loss_weight
         )
 
         # Full L2 norm (not mean)
-        latent_comp_perm_loss = torch.norm(neural_comp_perm - target_r_mus, p=2)
+        latent_comp_perm_loss = torch.norm(
+            live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
+        )
         latent_comp_perm_loss_weighted = (
             latent_comp_perm_loss * config.latent_comp_perm_loss_weight
         )
