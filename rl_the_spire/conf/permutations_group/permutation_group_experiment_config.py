@@ -15,6 +15,9 @@ from rl_the_spire.conf.permutations_group.permutation_group_encoder_config impor
 from rl_the_spire.conf.permutations_group.permutation_group_inverter_network_config import (
     PermutationGroupInverterNetworkConfig,
 )
+from rl_the_spire.conf.permutations_group.permutation_group_optimizer_config import (
+    PermutationGroupOptimizerConfig,
+)
 from rl_the_spire.conf.permutations_group.permutation_group_vae_config import (
     PermutationGroupVAEConfig,
 )
@@ -28,6 +31,7 @@ class PermutationGroupExperimentConfig:
     conv_transformer: PermutationGroupConvTransformerConfig
     inverter_network: PermutationGroupInverterNetworkConfig
     composer_network: PermutationGroupComposerNetworkConfig
+    optimizer: PermutationGroupOptimizerConfig
     iterations: int
     eval_interval: int
     experiment_name: str

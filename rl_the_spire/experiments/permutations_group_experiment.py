@@ -206,7 +206,25 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         + list(inverter_network.parameters())
         + list(composer_network.parameters())
     )
-    optimizer = torch.optim.AdamW(params, lr=2e-4)
+    optimizer = torch.optim.AdamW(
+        params,
+        lr=config.optimizer.lr,
+        betas=(config.optimizer.beta1, config.optimizer.beta2),
+        weight_decay=config.optimizer.weight_decay,
+    )
+
+    # Create a learning rate scheduler with warmup
+    logger.info(
+        f"Setting up LR scheduler with {config.optimizer.warmup_steps} warmup steps..."
+    )
+
+    def lr_lambda(current_step: int) -> float:
+        # Linear warmup followed by constant learning rate
+        if current_step < config.optimizer.warmup_steps:
+            return float(current_step) / float(max(1, config.optimizer.warmup_steps))
+        return 1.0
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
     if config.wandb_enabled:
         # 6. Initialize Weights & Biases
@@ -505,9 +523,11 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         optimizer.zero_grad()
         total_loss.backward()  # type: ignore
         optimizer.step()
+        scheduler.step()
 
         # Log training losses
         if step % config.log_interval == 0:
+            current_lr = scheduler.get_last_lr()[0]
             if config.wandb_enabled:
                 wandb.log(
                     {
@@ -520,6 +540,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
                         "train/neural_comp_perm_loss": neural_comp_perm_loss.item(),
                         "train/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
+                        "train/learning_rate": current_lr,
                     },
                     step=step,
                 )
@@ -529,6 +550,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"recon={reconstruction_losses:.4f}, "
                 f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
                 f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
+                f"lr={current_lr:.6f}"
             )
 
     return 0

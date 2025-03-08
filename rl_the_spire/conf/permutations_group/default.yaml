@@ -21,6 +21,12 @@ encoder:
   n_output_columns: 8
   activation: "gelu"
   linear_size_multiplier: 4
+optimizer:
+  lr: 2.0e-4
+  warmup_steps: 100
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: 0.01
 vae:
   gamma: 0.5
   kl_loss_weight: 0.01
