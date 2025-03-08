@@ -8,6 +8,7 @@ if [ -z "$VIRTUAL_ENV" ]; then
 fi
 
 # Install dev requirements and package
+pip install wheel
 pip install -r dev-requirements.txt -e .
 
 echo "Running black..."
