@@ -408,8 +408,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         target_r_mus, _ = target_encoder(eval_r)
                 else:
                     with torch.no_grad():
-                        target_inv_mus = permutation_encoder(eval_inv)
-                        target_r_mus = permutation_encoder(eval_r)
+                        target_inv_mus, _ = permutation_encoder(eval_inv)
+                        target_r_mus, _ = permutation_encoder(eval_r)
 
                 # Full L2 norm (not mean)
                 latent_inv_perm_loss = torch.norm(
@@ -598,8 +598,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 target_r_mus, _ = target_encoder(r)
         else:
             with torch.no_grad():
-                target_inv_mus = permutation_encoder(inv)
-                target_r_mus = permutation_encoder(r)
+                target_inv_mus, _ = permutation_encoder(inv)
+                target_r_mus, _ = permutation_encoder(r)
 
         # Full L2 norm (not mean)
         latent_inv_perm_loss = torch.norm(
