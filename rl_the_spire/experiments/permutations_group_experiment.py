@@ -226,6 +226,20 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
+    # Function to calculate KL weight with warmup
+    logger.info(
+        f"Setting up KL weight warmup over {config.vae.kl_warmup_steps} steps from {config.vae.kl_warmup_start_weight} to {config.vae.kl_loss_weight}..."
+    )
+
+    def get_kl_weight(current_step: int) -> float:
+        # Linear warmup of KL weight from start_weight to target weight
+        if current_step < config.vae.kl_warmup_steps:
+            alpha = float(current_step) / float(max(1, config.vae.kl_warmup_steps))
+            return config.vae.kl_warmup_start_weight + alpha * (
+                config.vae.kl_loss_weight - config.vae.kl_warmup_start_weight
+            )
+        return config.vae.kl_loss_weight
+
     if config.wandb_enabled:
         # 6. Initialize Weights & Biases
         logger.info("Initializing WanDB...")
@@ -282,7 +296,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         / TOTAL_ENCODED_PERMUTATIONS
                     )
 
-                kl_losses_eval_weighted = kl_losses_eval * config.vae.kl_loss_weight
+                kl_losses_eval_weighted = kl_losses_eval * get_kl_weight(step)
 
                 # Sample & decode
                 samp_perm = gamma_vae_sample(
@@ -371,6 +385,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "eval/total_loss": total_loss_eval.item(),
                         "eval/kl_loss": kl_losses_eval.item(),  # raw KL
                         "eval/kl_loss_weighted": kl_losses_eval_weighted.item(),
+                        "eval/kl_weight": get_kl_weight(step),
                         "eval/reconstruction_loss": reconstruction_losses_eval.item(),
                         "eval/reconstruction_loss_weighted": reconstruction_losses_eval_weighted.item(),
                         "eval/neural_inv_perm_loss": neural_inv_perm_loss.item(),
@@ -437,7 +452,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             )
 
         # Weight it by config.vae.kl_loss_weight
-        kl_losses_weighted = kl_losses * config.vae.kl_loss_weight
+        kl_losses_weighted = kl_losses * get_kl_weight(step)
 
         # Sample from the latent distribution
         sampled_perm = gamma_vae_sample(
@@ -528,12 +543,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # Log training losses
         if step % config.log_interval == 0:
             current_lr = scheduler.get_last_lr()[0]
+            current_kl_weight = get_kl_weight(step)
             if config.wandb_enabled:
                 wandb.log(
                     {
                         "train/total_loss": total_loss.item(),
                         "train/kl_loss": kl_losses.item(),  # raw KL
                         "train/kl_loss_weighted": kl_losses_weighted.item(),
+                        "train/kl_weight": current_kl_weight,
                         "train/reconstruction_loss": reconstruction_losses.item(),
                         "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
                         "train/neural_inv_perm_loss": neural_inv_perm_loss.item(),
@@ -547,6 +564,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             logger.info(
                 f"[Train step {step}] total={total_loss:.4f}, "
                 f"kl={kl_losses:.4f}, "
+                f"kl_weight={current_kl_weight:.6f}, "
                 f"recon={reconstruction_losses:.4f}, "
                 f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
                 f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
