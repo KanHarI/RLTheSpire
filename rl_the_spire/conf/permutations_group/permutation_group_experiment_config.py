@@ -42,5 +42,9 @@ class PermutationGroupExperimentConfig:
     neural_comp_perm_loss_weight: float
     latent_inv_perm_loss_weight: float
     latent_comp_perm_loss_weight: float
+    # Latent loss warmup parameters
+    latent_warmup_steps: int
+    latent_warmup_start_weight: float
+    latent_warmup_delay_steps: int
     use_ema_target: bool
     ema_tau: float

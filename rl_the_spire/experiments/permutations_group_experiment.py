@@ -259,7 +259,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     logger.info(
         f"Setting up KL weight warmup over {config.vae.kl_warmup_steps} steps from {config.vae.kl_warmup_start_weight} to {config.vae.kl_loss_weight}..."
     )
-    
+
     # Add log for latent warmup configuration
     logger.info(
         f"Setting up latent loss warmup with {config.latent_warmup_delay_steps} delay steps followed by {config.latent_warmup_steps} warmup steps..."
@@ -278,7 +278,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # Keep weight at 0 during delay period
         if current_step < config.latent_warmup_delay_steps:
             return 0.0
-        
+
         # Linear warmup of latent loss weights from start_weight to target weight
         # after the delay period
         warmup_step = current_step - config.latent_warmup_delay_steps
@@ -436,7 +436,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
                 )
                 latent_inv_perm_loss_weighted = (
-                    latent_inv_perm_loss * config.latent_inv_perm_loss_weight * get_latent_weight(step)
+                    latent_inv_perm_loss
+                    * config.latent_inv_perm_loss_weight
+                    * get_latent_weight(step)
                 )
 
                 # Full L2 norm (not mean)
@@ -444,7 +446,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
                 )
                 latent_comp_perm_loss_weighted = (
-                    latent_comp_perm_loss * config.latent_comp_perm_loss_weight * get_latent_weight(step)
+                    latent_comp_perm_loss
+                    * config.latent_comp_perm_loss_weight
+                    * get_latent_weight(step)
                 )
 
                 total_loss_eval = (
@@ -627,7 +631,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
         )
         latent_inv_perm_loss_weighted = (
-            latent_inv_perm_loss * config.latent_inv_perm_loss_weight * get_latent_weight(step)
+            latent_inv_perm_loss
+            * config.latent_inv_perm_loss_weight
+            * get_latent_weight(step)
         )
 
         # Full L2 norm (not mean)
@@ -635,7 +641,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
         )
         latent_comp_perm_loss_weighted = (
-            latent_comp_perm_loss * config.latent_comp_perm_loss_weight * get_latent_weight(step)
+            latent_comp_perm_loss
+            * config.latent_comp_perm_loss_weight
+            * get_latent_weight(step)
         )
 
         # Combine total loss
