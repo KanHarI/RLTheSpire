@@ -259,6 +259,11 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     logger.info(
         f"Setting up KL weight warmup over {config.vae.kl_warmup_steps} steps from {config.vae.kl_warmup_start_weight} to {config.vae.kl_loss_weight}..."
     )
+    
+    # Add log for latent warmup configuration
+    logger.info(
+        f"Setting up latent loss warmup with {config.latent_warmup_delay_steps} delay steps followed by {config.latent_warmup_steps} warmup steps..."
+    )
 
     def get_kl_weight(current_step: int) -> float:
         # Linear warmup of KL weight from start_weight to target weight
@@ -268,6 +273,21 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 config.vae.kl_loss_weight - config.vae.kl_warmup_start_weight
             )
         return config.vae.kl_loss_weight
+
+    def get_latent_weight(current_step: int) -> float:
+        # Keep weight at 0 during delay period
+        if current_step < config.latent_warmup_delay_steps:
+            return 0.0
+        
+        # Linear warmup of latent loss weights from start_weight to target weight
+        # after the delay period
+        warmup_step = current_step - config.latent_warmup_delay_steps
+        if warmup_step < config.latent_warmup_steps:
+            alpha = float(warmup_step) / float(max(1, config.latent_warmup_steps))
+            return config.latent_warmup_start_weight + alpha * (
+                1.0 - config.latent_warmup_start_weight
+            )
+        return 1.0
 
     if config.wandb_enabled:
         # 6. Initialize Weights & Biases
@@ -416,7 +436,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
                 )
                 latent_inv_perm_loss_weighted = (
-                    latent_inv_perm_loss * config.latent_inv_perm_loss_weight
+                    latent_inv_perm_loss * config.latent_inv_perm_loss_weight * get_latent_weight(step)
                 )
 
                 # Full L2 norm (not mean)
@@ -424,7 +444,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
                 )
                 latent_comp_perm_loss_weighted = (
-                    latent_comp_perm_loss * config.latent_comp_perm_loss_weight
+                    latent_comp_perm_loss * config.latent_comp_perm_loss_weight * get_latent_weight(step)
                 )
 
                 total_loss_eval = (
@@ -444,6 +464,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "eval/kl_loss": kl_losses_eval.item(),  # raw KL
                         "eval/kl_loss_weighted": kl_losses_eval_weighted.item(),
                         "eval/kl_weight": get_kl_weight(step),
+                        "eval/latent_weight": get_latent_weight(step),
                         "eval/reconstruction_loss": reconstruction_losses_eval.item(),
                         "eval/reconstruction_loss_weighted": reconstruction_losses_eval_weighted.item(),
                         "eval/neural_inv_perm_loss": neural_inv_perm_loss.item(),
@@ -606,7 +627,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
         )
         latent_inv_perm_loss_weighted = (
-            latent_inv_perm_loss * config.latent_inv_perm_loss_weight
+            latent_inv_perm_loss * config.latent_inv_perm_loss_weight * get_latent_weight(step)
         )
 
         # Full L2 norm (not mean)
@@ -614,7 +635,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
         )
         latent_comp_perm_loss_weighted = (
-            latent_comp_perm_loss * config.latent_comp_perm_loss_weight
+            latent_comp_perm_loss * config.latent_comp_perm_loss_weight * get_latent_weight(step)
         )
 
         # Combine total loss
@@ -648,6 +669,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/kl_loss": kl_losses.item(),  # raw KL
                         "train/kl_loss_weighted": kl_losses_weighted.item(),
                         "train/kl_weight": current_kl_weight,
+                        "train/latent_weight": get_latent_weight(step),
                         "train/reconstruction_loss": reconstruction_losses.item(),
                         "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
                         "train/neural_inv_perm_loss": neural_inv_perm_loss.item(),
