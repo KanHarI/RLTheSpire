@@ -10,6 +10,7 @@ from rl_the_spire.models.common.mlp import MLP, MLPConfig
 
 logger = logging.getLogger(__name__)
 
+
 @dataclasses.dataclass
 class GridToSequenceConfig:
     """
@@ -101,7 +102,9 @@ class GridToSequence(torch.nn.Module):
         self.inv_sqrt_head_size = 1.0 / math.sqrt(self.head_size)
         self.flash = hasattr(torch.nn.functional, "scaled_dot_product_attention")
         if not self.flash:
-            logger.warning("WARNING: flash attention not available, using regular attention")
+            logger.warning(
+                "WARNING: flash attention not available, using regular attention"
+            )
 
     def init_weights(self) -> None:
         torch.nn.init.normal_(self.grid_to_kv_proj, std=self.config.init_std)
@@ -111,12 +114,15 @@ class GridToSequence(torch.nn.Module):
     def forward(self, x: torch.Tensor, pos_encodings: torch.Tensor) -> torch.Tensor:
         *B, R, C, Eg = x.shape
         *_, L, Es = pos_encodings.shape
-        
+
         # Flatten grid dimensions
         x = x.reshape(*B, R * C, Eg)
 
-        x = torch.einsum("...gi,ij->...gj", x, self.grid_to_kv_proj) + self.grid_to_kv_proj_bias
-        k, v = x.split(self.config.seq_n_embed, dim=-1)
+        x = (
+            torch.einsum("...gi,ij->...gj", x, self.grid_to_kv_proj)
+            + self.grid_to_kv_proj_bias
+        )
+        k, v = x.split(self.config.seq_n_embed, dim=-1)  # type: ignore
         q = pos_encodings + self.sequence_to_q_mlp(pos_encodings)
 
         q = q.reshape(*B, L, self.config.n_heads, self.head_size).transpose(1, 2)
@@ -138,8 +144,7 @@ class GridToSequence(torch.nn.Module):
             out = att @ v
 
         out = out.transpose(1, 2).contiguous().view(*B, L, self.config.seq_n_embed)
-        out = pos_encodings + self.resid_dropout(torch.einsum("...ti,ij->...tj", (out, self.c_proj)))
+        out = pos_encodings + self.resid_dropout(
+            torch.einsum("...ti,ij->...tj", (out, self.c_proj))
+        )
         return out
-
-
-

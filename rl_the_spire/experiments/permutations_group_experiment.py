@@ -33,51 +33,52 @@ from rl_the_spire.models.permutations.permutation_encoder import (
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
 from rl_the_spire.models.vaes.kl_loss import kl_loss
 
-# Configure logger with timestamp and module name
+# Configure logger
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
-logger = logging.getLogger(__name__)  # <-- Logger instance
+logger = logging.getLogger(__name__)
 
 
 @hydra.main(
-    config_path="../conf/permutations_group", config_name="default", version_base=None
+    config_path="../conf/permutations_group",  # Adjust path if needed
+    config_name="default",  # The name of your .yaml file, e.g. "default.yaml"
+    version_base=None,
 )
 def main(hydra_cfg: dict[Any, Any]) -> int:
+    # 1. Parse the Hydra config into our dataclasses
     config: PermutationGroupExperimentConfig = dacite.from_dict(
         data_class=PermutationGroupExperimentConfig,
         data=hydra_cfg,
     )
 
-    # Log and create inversions dataset configuration
+    logger.info("Initializing experiment...")
+
+    TOTAL_ENCODED_PERMUTATIONS = 5  # constant used to average out loss components
+
+    # 2. Create Datasets
     logger.info("Creating inversion dataset config...")
     inversions_dataset_config = PermutationInverseDatasetConfig(
         n_max_permutation_size=config.dataset.n_max_permutation_size,
         gamma=config.dataset.gamma,
     )
 
-    # Log and create inversions dataset
     logger.info("Creating inversions dataset...")
     inversions_dataset = PermutationAndInverseDataset(inversions_dataset_config)
 
-    # Log and create composition dataset configuration
     logger.info("Creating composition dataset config...")
     composition_dataset_config = ComposedPermutationDatasetConfig(
         n_max_permutation_size=config.dataset.n_max_permutation_size,
         gamma=config.dataset.gamma,
     )
 
-    # Log and create composition dataset
     logger.info("Creating composition dataset...")
     composition_dataset = ComposedPermutationDataset(composition_dataset_config)
 
-    # Log and create inversions dataloader
-    logger.info("Creating inversions dataloader...")
-
+    # 3. Create Dataloaders
     num_workers = 0
     prefetch_factor = None
-
     if platform.system() == "Linux":
         num_workers = config.dataset.num_workers
         prefetch_factor = config.dataset.prefetch_factor
@@ -91,9 +92,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             pin_memory=True,
         )
     )
-
-    # Log and create composition dataloader
-    logger.info("Creating composition dataloader...")
     composition_dataloader = iter(
         DataLoader(
             composition_dataset,
@@ -104,7 +102,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         )
     )
 
-    # Create permutation encoder
+    # 4. Create Models (Encoder/Decoder)
     logger.info("Creating permutation encoder...")
     permutation_encoder_config = PermutationEncoderConfig(
         n_max_permutation_size=config.dataset.n_max_permutation_size,
@@ -152,26 +150,140 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     permutations_decoder = PermutationDecoder(permutations_decoder_config)
     permutations_decoder.init_weights()
 
-    # Initialize wandb
-    logger.info("Initializing WanDB...")
-    wandb.init(project="rl_the_spire.permutations_group", name=config.experiment_name)
-    wandb.config.update(config)  # type: ignore
+    # 5. Create an optimizer
+    logger.info("Creating AdamW optimizer...")
+    params = list(permutation_encoder.parameters()) + list(
+        permutations_decoder.parameters()
+    )
+    optimizer = torch.optim.AdamW(params, lr=1e-3)
 
-    # Run experiment
-    logger.info("Running experiment...")
-    TOTAL_ENCODED_PERMUTATIONS = 5
-    for i in range(config.iterations):
+    if config.wandb_enabled:
+        # 6. Initialize Weights & Biases
+        logger.info("Initializing WanDB...")
+        wandb.init(
+            project="rl_the_spire.permutations_group", name=config.experiment_name
+        )
+        wandb.config.update(config)  # type: ignore
+
+    # 7. Training/Eval Loop
+    logger.info("Starting training loop...")
+
+    for step in range(config.iterations):
+        # -------------------
+        #       EVAL
+        # -------------------
+        if step % config.eval_interval == 0 and step > 0:
+            permutation_encoder.eval()
+            permutations_decoder.eval()
+            with torch.no_grad():
+                # Sample new data for evaluation
+                eval_perm, eval_inv = next(inversions_dataloader)
+                eval_p, eval_q, eval_r = next(composition_dataloader)
+
+                # Forward pass
+                ep_perm_mus, ep_perm_logvars = permutation_encoder(eval_perm)
+                ep_inv_mus, ep_inv_logvars = permutation_encoder(eval_inv)
+                ep_p_mus, ep_p_logvars = permutation_encoder(eval_p)
+                ep_q_mus, ep_q_logvars = permutation_encoder(eval_q)
+                ep_r_mus, ep_r_logvars = permutation_encoder(eval_r)
+
+                kl_losses_eval = torch.tensor(0.0)
+                for mus, logvars in zip(
+                    [ep_perm_mus, ep_inv_mus, ep_p_mus, ep_q_mus, ep_r_mus],
+                    [
+                        ep_perm_logvars,
+                        ep_inv_logvars,
+                        ep_p_logvars,
+                        ep_q_logvars,
+                        ep_r_logvars,
+                    ],
+                ):
+                    kl_losses_eval += (
+                        kl_loss(mus, logvars).sum() / TOTAL_ENCODED_PERMUTATIONS
+                    )
+
+                kl_losses_eval_weighted = kl_losses_eval * config.vae.kl_loss_weight
+
+                # Sample & decode
+                samp_perm = gamma_vae_sample(
+                    ep_perm_mus, ep_perm_logvars, config.vae.gamma
+                )
+                samp_inv = gamma_vae_sample(
+                    ep_inv_mus, ep_inv_logvars, config.vae.gamma
+                )
+                samp_p = gamma_vae_sample(ep_p_mus, ep_p_logvars, config.vae.gamma)
+                samp_q = gamma_vae_sample(ep_q_mus, ep_q_logvars, config.vae.gamma)
+                samp_r = gamma_vae_sample(ep_r_mus, ep_r_logvars, config.vae.gamma)
+
+                dec_perm = permutations_decoder(
+                    samp_perm, permutation_encoder.embedder.pos_embedding
+                )
+                dec_inv = permutations_decoder(
+                    samp_inv, permutation_encoder.embedder.pos_embedding
+                )
+                dec_p = permutations_decoder(
+                    samp_p, permutation_encoder.embedder.pos_embedding
+                )
+                dec_q = permutations_decoder(
+                    samp_q, permutation_encoder.embedder.pos_embedding
+                )
+                dec_r = permutations_decoder(
+                    samp_r, permutation_encoder.embedder.pos_embedding
+                )
+
+                reconstruction_losses_eval = torch.tensor(0.0)
+                for dec, orig in zip(
+                    [dec_perm, dec_inv, dec_p, dec_q, dec_r],
+                    [eval_perm, eval_inv, eval_p, eval_q, eval_r],
+                ):
+                    reconstruction_losses_eval += (
+                        permutation_encoder.embedder.nll_loss(dec, orig).sum()
+                        / TOTAL_ENCODED_PERMUTATIONS
+                    )
+                reconstruction_losses_eval_weighted = (
+                    reconstruction_losses_eval * config.reconstruction_loss_weight
+                )
+
+                total_loss_eval = (
+                    kl_losses_eval_weighted + reconstruction_losses_eval_weighted
+                )
+
+            # Log eval losses
+            if config.wandb_enabled:
+                wandb.log(
+                    {
+                        "eval/total_loss": total_loss_eval.item(),
+                        "eval/kl_loss": kl_losses_eval.item(),  # raw KL
+                        "eval/kl_loss_weighted": kl_losses_eval_weighted.item(),
+                        "eval/reconstruction_loss": reconstruction_losses_eval.item(),
+                        "eval/reconstruction_loss_weighted": reconstruction_losses_eval_weighted.item(),
+                    },
+                    step=step,
+                )
+
+            logger.info(
+                f"[Eval step {step}] total={total_loss_eval:.4f}, "
+                f"kl={kl_losses_eval:.4f}, "
+                f"recon={reconstruction_losses_eval:.4f}"
+            )
+
+        # -------------------
+        #      TRAIN
+        # -------------------
+        permutation_encoder.train()
+        permutations_decoder.train()
+
         perm, inv = next(inversions_dataloader)
         p, q, r = next(composition_dataloader)
 
-        # Run autoencoder
+        # Forward pass
         encoded_perm_mus, encoded_perm_logvars = permutation_encoder(perm)
         encoded_inv_mus, encoded_inv_logvars = permutation_encoder(inv)
         encoded_p_mus, encoded_p_logvars = permutation_encoder(p)
         encoded_q_mus, encoded_q_logvars = permutation_encoder(q)
         encoded_r_mus, encoded_r_logvars = permutation_encoder(r)
 
-        # Calculate all KL losses
+        # KL loss (averaged over the 5 permutations)
         kl_losses = torch.tensor(0.0)
         for mus, logvars in zip(
             [
@@ -191,6 +303,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         ):
             kl_losses += kl_loss(mus, logvars).sum() / TOTAL_ENCODED_PERMUTATIONS
 
+        # Weight it by config.vae.kl_loss_weight
+        kl_losses_weighted = kl_losses * config.vae.kl_loss_weight
+
+        # Sample from the latent distribution
         sampled_perm = gamma_vae_sample(
             encoded_perm_mus, encoded_perm_logvars, config.vae.gamma
         )
@@ -201,29 +317,57 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         sampled_q = gamma_vae_sample(encoded_q_mus, encoded_q_logvars, config.vae.gamma)
         sampled_r = gamma_vae_sample(encoded_r_mus, encoded_r_logvars, config.vae.gamma)
 
-        decoded_perm = permutations_decoder(sampled_perm, permutation_encoder.embedder.pos_embedding)
-        decoded_inv = permutations_decoder(sampled_inv, permutation_encoder.embedder.pos_embedding)
-        decoded_p = permutations_decoder(sampled_p, permutation_encoder.embedder.pos_embedding)
-        decoded_q = permutations_decoder(sampled_q, permutation_encoder.embedder.pos_embedding)
-        decoded_r = permutations_decoder(sampled_r, permutation_encoder.embedder.pos_embedding)
+        # Decode
+        decoded_perm = permutations_decoder(
+            sampled_perm, permutation_encoder.embedder.pos_embedding
+        )
+        decoded_inv = permutations_decoder(
+            sampled_inv, permutation_encoder.embedder.pos_embedding
+        )
+        decoded_p = permutations_decoder(
+            sampled_p, permutation_encoder.embedder.pos_embedding
+        )
+        decoded_q = permutations_decoder(
+            sampled_q, permutation_encoder.embedder.pos_embedding
+        )
+        decoded_r = permutations_decoder(
+            sampled_r, permutation_encoder.embedder.pos_embedding
+        )
 
-        # Calculate reconstruction losses
+        # Reconstruction losses (averaged over 5 permutations)
         reconstruction_losses = torch.tensor(0.0)
         for decoded, original in zip(
             [decoded_perm, decoded_inv, decoded_p, decoded_q, decoded_r],
             [perm, inv, p, q, r],
         ):
-            reconstruction_losses += permutation_encoder.embedder.nll_loss(decoded, original).sum() / TOTAL_ENCODED_PERMUTATIONS
-        
-        # Calculate total loss
-        total_loss = kl_losses + reconstruction_losses
+            reconstruction_losses += (
+                permutation_encoder.embedder.nll_loss(decoded, original).sum()
+                / TOTAL_ENCODED_PERMUTATIONS
+            )
+        reconstruction_losses_weighted = (
+            reconstruction_losses * config.reconstruction_loss_weight
+        )
 
-        # Log total loss
-        logger.info(f"Total loss: {total_loss.item()}")
-        logger.info(f"KL loss: {kl_losses.item()}")
-        logger.info(f"Reconstruction loss: {reconstruction_losses.item()}")
+        # Combine total loss
+        total_loss = kl_losses_weighted + reconstruction_losses_weighted
 
-        raise NotImplementedError("Not implemented")
+        # Optimize
+        optimizer.zero_grad()
+        total_loss.backward()  # type: ignore
+        optimizer.step()
+
+        # Log training losses
+        if config.wandb_enabled and step % config.log_interval == 0:
+            wandb.log(
+                {
+                    "train/total_loss": total_loss.item(),
+                    "train/kl_loss": kl_losses.item(),  # raw KL
+                    "train/kl_loss_weighted": kl_losses_weighted.item(),
+                    "train/reconstruction_loss": reconstruction_losses.item(),
+                    "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
+                },
+                step=step,
+            )
 
     return 0
 

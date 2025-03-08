@@ -23,3 +23,6 @@ class PermutationGroupExperimentConfig:
     iterations: int
     eval_interval: int
     experiment_name: str
+    wandb_enabled: bool
+    log_interval: int
+    reconstruction_loss_weight: float

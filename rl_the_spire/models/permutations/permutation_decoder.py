@@ -122,5 +122,7 @@ class PermutationDecoder(torch.nn.Module):
     def forward(self, x: torch.Tensor, pos_encodings: torch.Tensor) -> torch.Tensor:
         x = self.grid_transformer(x)
         # Broadcast pos_encoding from (L, E) to (B, L, E)
-        x = self.grid_to_sequence(x, pos_encodings.unsqueeze(0).expand(x.shape[0], -1, -1))
+        x = self.grid_to_sequence(
+            x, pos_encodings.unsqueeze(0).expand(x.shape[0], -1, -1)
+        )
         return self.sequence_transformer(x, extra_embed=torch.zeros_like(x[:, :, :0]))  # type: ignore
