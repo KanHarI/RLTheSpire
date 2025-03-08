@@ -46,3 +46,7 @@ log_interval: 20
 reconstruction_loss_weight: 1.0
 neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
+latent_inv_perm_loss_weight: 5.0
+latent_comp_perm_loss_weight: 5.0
+use_ema_target: true
+ema_tau: 0.005

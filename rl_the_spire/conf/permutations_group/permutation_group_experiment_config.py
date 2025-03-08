@@ -40,3 +40,7 @@ class PermutationGroupExperimentConfig:
     reconstruction_loss_weight: float
     neural_inv_perm_loss_weight: float
     neural_comp_perm_loss_weight: float
+    latent_inv_perm_loss_weight: float
+    latent_comp_perm_loss_weight: float
+    use_ema_target: bool
+    ema_tau: float

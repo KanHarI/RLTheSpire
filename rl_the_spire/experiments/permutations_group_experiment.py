@@ -1,3 +1,4 @@
+import copy
 import logging
 import platform
 from typing import Any
@@ -5,9 +6,10 @@ from typing import Any
 import dacite
 import hydra
 import torch
-import wandb
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
+import wandb
 from rl_the_spire.conf.permutations_group.permutation_group_experiment_config import (
     PermutationGroupExperimentConfig,
 )
@@ -134,6 +136,15 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     )
     permutation_encoder = PermutationEncoder(permutation_encoder_config)
     permutation_encoder.init_weights()
+
+    # Create target encoder if using EMA
+    target_encoder = None
+    if config.use_ema_target:
+        logger.info("Initializing EMA target encoder")
+        target_encoder = copy.deepcopy(permutation_encoder)
+        target_encoder.to(get_device(config.encoder.device))
+        # Set to eval mode, we never train this directly
+        target_encoder.eval()
 
     logger.info("Creating permutations decoder...")
     permutations_decoder_config = PermutationDecoderConfig(
@@ -273,7 +284,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 eval_q = eval_q.to(device)
                 eval_r = eval_r.to(device)
 
-                # Forward pass
+                # Forward pass - always use the main encoder
                 ep_perm_mus, ep_perm_logvars = permutation_encoder(eval_perm)
                 ep_inv_mus, ep_inv_logvars = permutation_encoder(eval_inv)
                 ep_p_mus, ep_p_logvars = permutation_encoder(eval_p)
@@ -371,11 +382,33 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     neural_comp_perm_loss * config.neural_comp_perm_loss_weight
                 )
 
+                # Add L2 losses in the latent space
+                # Use the target encoder for target values if available
+                if config.use_ema_target and target_encoder is not None:
+                    with torch.no_grad():
+                        target_inv_mus, _ = target_encoder(eval_inv)
+                        target_r_mus, _ = target_encoder(eval_r)
+                else:
+                    target_inv_mus = ep_inv_mus
+                    target_r_mus = ep_r_mus
+
+                latent_inv_perm_loss = F.mse_loss(neural_inv_perm, target_inv_mus)
+                latent_inv_perm_loss_weighted = (
+                    latent_inv_perm_loss * config.latent_inv_perm_loss_weight
+                )
+
+                latent_comp_perm_loss = F.mse_loss(neural_comp_perm, target_r_mus)
+                latent_comp_perm_loss_weighted = (
+                    latent_comp_perm_loss * config.latent_comp_perm_loss_weight
+                )
+
                 total_loss_eval = (
                     kl_losses_eval_weighted
                     + reconstruction_losses_eval_weighted
                     + neural_inv_perm_loss_weighted
                     + neural_comp_perm_loss_weighted
+                    + latent_inv_perm_loss_weighted
+                    + latent_comp_perm_loss_weighted
                 )
 
             # Log eval losses
@@ -392,6 +425,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "eval/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
                         "eval/neural_comp_perm_loss": neural_comp_perm_loss.item(),
                         "eval/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
+                        "eval/latent_inv_perm_loss": latent_inv_perm_loss.item(),
+                        "eval/latent_comp_perm_loss": latent_comp_perm_loss.item(),
                     },
                     step=step,
                 )
@@ -402,6 +437,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"recon={reconstruction_losses_eval:.4f}, "
                 f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
                 f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
+                f"latent_inv_perm_loss={latent_inv_perm_loss:.4f}, "
+                f"latent_comp_perm_loss={latent_comp_perm_loss:.4f}, "
             )
 
         # -------------------
@@ -526,12 +563,34 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             neural_comp_perm_loss * config.neural_comp_perm_loss_weight
         )
 
+        # Add L2 losses in the latent space
+        # Use the target encoder for target values if available
+        if config.use_ema_target and target_encoder is not None:
+            with torch.no_grad():
+                target_inv_mus, _ = target_encoder(inv)
+                target_r_mus, _ = target_encoder(r)
+        else:
+            target_inv_mus = encoded_inv_mus
+            target_r_mus = encoded_r_mus
+
+        latent_inv_perm_loss = F.mse_loss(neural_inv_perm, target_inv_mus)
+        latent_inv_perm_loss_weighted = (
+            latent_inv_perm_loss * config.latent_inv_perm_loss_weight
+        )
+
+        latent_comp_perm_loss = F.mse_loss(neural_comp_perm, target_r_mus)
+        latent_comp_perm_loss_weighted = (
+            latent_comp_perm_loss * config.latent_comp_perm_loss_weight
+        )
+
         # Combine total loss
         total_loss = (
             kl_losses_weighted
             + reconstruction_losses_weighted
             + neural_inv_perm_loss_weighted
             + neural_comp_perm_loss_weighted
+            + latent_inv_perm_loss_weighted
+            + latent_comp_perm_loss_weighted
         )
 
         # Optimize
@@ -539,6 +598,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         total_loss.backward()  # type: ignore
         optimizer.step()
         scheduler.step()
+
+        # Update target network with EMA if enabled
+        if config.use_ema_target and target_encoder is not None:
+            ema_update(target_encoder, permutation_encoder, config.ema_tau)
 
         # Log training losses
         if step % config.log_interval == 0:
@@ -557,6 +620,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
                         "train/neural_comp_perm_loss": neural_comp_perm_loss.item(),
                         "train/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
+                        "train/latent_inv_perm_loss": latent_inv_perm_loss.item(),
+                        "train/latent_comp_perm_loss": latent_comp_perm_loss.item(),
                         "train/learning_rate": current_lr,
                     },
                     step=step,
@@ -568,10 +633,32 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"recon={reconstruction_losses:.4f}, "
                 f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
                 f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
+                f"latent_inv_perm_loss={latent_inv_perm_loss:.4f}, "
+                f"latent_comp_perm_loss={latent_comp_perm_loss:.4f}, "
                 f"lr={current_lr:.6f}"
             )
 
     return 0
+
+
+def ema_update(
+    target_model: torch.nn.Module, source_model: torch.nn.Module, tau: float
+) -> None:
+    """
+    Update the target model parameters with the source model parameters using EMA.
+
+    Args:
+        target_model: The target model to be updated
+        source_model: The source model to update from
+        tau: The update factor (small value for slow updates)
+    """
+    with torch.no_grad():
+        for target_param, source_param in zip(
+            target_model.parameters(), source_model.parameters()
+        ):
+            target_param.data.copy_(
+                tau * source_param.data + (1.0 - tau) * target_param.data
+            )
 
 
 if __name__ == "__main__":
