@@ -41,6 +41,7 @@ class PermutationEncoderConfig:
     conv_transformer_n_heads: int
     activation: Callable[[torch.Tensor], torch.Tensor]
     linear_size_multiplier: int
+    sigma_output: bool = True
 
 
 class PermutationEncoder(torch.nn.Module):
@@ -73,7 +74,10 @@ class PermutationEncoder(torch.nn.Module):
         self.transformer_body = TransformerBody(transformer_body_config)
         attention_to_tensor_config = AttentionToTensorConfig(
             n_embed=config.n_embed,
-            n_output_embed=config.n_output_embed * 2,  # For mus and logvars
+            n_output_embed=config.n_output_embed
+            * (
+                2 if config.sigma_output else 1
+            ),  # For mus and logvars if sigma_output else just mus
             n_output_rows=config.n_output_rows,
             n_output_columns=config.n_output_columns,
             n_heads=config.n_output_heads,
@@ -86,7 +90,10 @@ class PermutationEncoder(torch.nn.Module):
         )
         self.attention_to_tensor = AttentionToTensor(attention_to_tensor_config)
         conv_transfomer_block_config = ConvTransformerBlockConfig(
-            n_embed=config.n_output_embed * 2,  # For mus and logvars
+            n_embed=config.n_output_embed
+            * (
+                2 if config.sigma_output else 1
+            ),  # For mus and logvars if sigma_output else just mus
             n_heads=config.conv_transformer_n_heads,
             attn_dropout=config.attn_dropout,
             resid_dropout=config.resid_dropout,
@@ -107,19 +114,36 @@ class PermutationEncoder(torch.nn.Module):
         self.conv_transformer_block.init_weights()
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass of PermutationEncoder.
+
+        Args:
+            x: [batch_size, permutation_size] tensor of integers
+
+        Returns:
+            mus: [batch_size, n_output_rows, n_output_columns, n_output_embed] tensor of floats
+            logvars: [batch_size, n_output_rows, n_output_columns, n_output_embed] tensor of floats
+        """
         x = self.embedder(x)
         x = self.transformer_body(x, extra_embed=torch.zeros_like(x[:, :, :0]))
         x = self.attention_to_tensor(x)
         x = self.conv_transformer_block(x)
-        # Turn into (batch_size, n_output_rows, n_output_columns, n_output_embed // 2, 2)
-        # For mus, logvars
-        x = x.view(
-            x.shape[0],
-            x.shape[1],
-            x.shape[2],
-            x.shape[3] // 2,
-            2,
-        )
-        mus = x[:, :, :, :, 0]
-        logsigmas = x[:, :, :, :, 1]
-        return mus, logsigmas
+
+        if self.config.sigma_output:
+            # Turn into (batch_size, n_output_rows, n_output_columns, n_output_embed, 2)
+            # For mus, logvars
+            x = x.view(
+                x.shape[0],
+                x.shape[1],
+                x.shape[2],
+                x.shape[3] // 2,
+                2,
+            )
+            mus = x[:, :, :, :, 0]
+            logvars = x[:, :, :, :, 1]
+        else:
+            # When sigma_output is False, we just have mus and return ones for logvars
+            mus = x
+            logvars = torch.ones_like(mus)
+
+        return mus, logvars

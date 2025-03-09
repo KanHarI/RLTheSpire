@@ -132,6 +132,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         activation=get_activation(config.encoder.activation),
         linear_size_multiplier=config.encoder.linear_size_multiplier,
         conv_transformer_n_heads=config.conv_transformer.n_heads,
+        sigma_output=config.encoder.sigma_output,
     )
     permutation_encoder = PermutationEncoder(permutation_encoder_config)
     permutation_encoder.init_weights()
@@ -636,7 +637,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 * get_latent_weight(step)
             )
         else:
-            latent_inv_perm_loss_weighted = torch.tensor(0.0, device=device, dtype=dtype)
+            latent_inv_perm_loss_weighted = torch.tensor(
+                0.0, device=device, dtype=dtype
+            )
 
         if config.latent_comp_perm_loss_weight > 0 and get_latent_weight(step) > 0:
             latent_comp_perm_loss = torch.norm(
@@ -648,7 +651,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 * get_latent_weight(step)
             )
         else:
-            latent_comp_perm_loss_weighted = torch.tensor(0.0, device=device, dtype=dtype)
+            latent_comp_perm_loss_weighted = torch.tensor(
+                0.0, device=device, dtype=dtype
+            )
 
         # Combine total loss
         total_loss = (

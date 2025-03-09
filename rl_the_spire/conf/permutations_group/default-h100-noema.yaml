@@ -21,6 +21,7 @@ encoder:
   n_output_columns: 8
   activation: "gelu"
   linear_size_multiplier: 4
+  sigma_output: false
 optimizer:
   lr: 1.0e-4
   warmup_steps: 2000
