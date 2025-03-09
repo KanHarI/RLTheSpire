@@ -49,6 +49,7 @@ neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
 latent_inv_perm_loss_weight: 0.01
 latent_comp_perm_loss_weight: 0.01
+latent_sampled_perm_loss_weight: 0.01
 # Latent loss warmup params
 latent_warmup_steps: 1000
 latent_warmup_start_weight: 0.0

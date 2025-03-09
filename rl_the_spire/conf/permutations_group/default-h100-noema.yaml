@@ -49,5 +49,11 @@ neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
 latent_inv_perm_loss_weight: 0.01
 latent_comp_perm_loss_weight: 0.01
+latent_sampled_perm_loss_weight: 0.01
+# Latent loss warmup params
+latent_warmup_steps: 5000
+latent_warmup_start_weight: 0.0
+latent_warmup_delay_steps: 2000
 use_ema_target: false
 ema_tau: 0.005
+init_ema_target_as_zeros: false
