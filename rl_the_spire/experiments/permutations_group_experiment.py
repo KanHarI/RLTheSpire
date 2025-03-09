@@ -330,6 +330,20 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             )
         return 1.0
 
+    # Function to calculate EMA tau with warmup
+    logger.info(
+        f"Setting up EMA tau warmup over {config.ema_tau_warmup_steps} steps from {config.ema_tau_start} to {config.ema_tau_final}..."
+    )
+
+    def get_ema_tau(current_step: int) -> float:
+        # Linear decrease of EMA tau from start_value to final_value
+        if current_step < config.ema_tau_warmup_steps:
+            alpha = float(current_step) / float(max(1, config.ema_tau_warmup_steps))
+            return config.ema_tau_start - alpha * (
+                config.ema_tau_start - config.ema_tau_final
+            )
+        return config.ema_tau_final
+
     if config.wandb_enabled:
         # 6. Initialize Weights & Biases
         logger.info("Initializing WanDB...")
@@ -827,7 +841,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Update target network with EMA if enabled
         if config.use_ema_target and target_encoder is not None:
-            ema_update(target_encoder, permutation_encoder, config.ema_tau)
+            ema_update(target_encoder, permutation_encoder, get_ema_tau(step))
 
         # Log training losses
         if step % config.log_interval == 0:
@@ -839,8 +853,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/total_loss": total_loss.item(),
                         "train/kl_loss": kl_losses.item(),  # raw KL
                         "train/kl_loss_weighted": kl_losses_weighted.item(),
-                        "train/kl_weight": current_kl_weight,
-                        "train/latent_weight": get_latent_weight(step),
                         "train/reconstruction_loss": reconstruction_losses.item(),
                         "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
                         "train/neural_inv_perm_loss": neural_inv_perm_loss.item(),
@@ -852,6 +864,11 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/latent_sampled_perm_losses": latent_sampled_perm_losses.item(),
                         "train/latent_sampled_perm_losses_weighted": latent_sampled_perm_losses_weighted.item(),
                         "train/learning_rate": current_lr,
+                        "train/kl_weight": current_kl_weight,
+                        "train/latent_weight": get_latent_weight(step),
+                        "train/ema_tau": (
+                            get_ema_tau(step) if config.use_ema_target else 0.0
+                        ),
                     },
                     step=step,
                 )

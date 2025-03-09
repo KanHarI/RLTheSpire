@@ -55,5 +55,9 @@ latent_warmup_steps: 5000
 latent_warmup_start_weight: 0.0
 latent_warmup_delay_steps: 2000
 use_ema_target: false
-ema_tau: 0.005
+# EMA tau scheduling (not used when use_ema_target is false)
+ema_tau_final: 0.005  # Final tau value
+ema_tau_start: 0.05   # Initial higher tau value
+ema_tau_warmup_steps: 10000  # Steps to decrease from start to final value
+ema_tau: ${ema_tau_final}  # Keeping for backward compatibility
 init_ema_target_as_zeros: false
