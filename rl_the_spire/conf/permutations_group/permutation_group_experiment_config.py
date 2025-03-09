@@ -48,3 +48,4 @@ class PermutationGroupExperimentConfig:
     latent_warmup_delay_steps: int
     use_ema_target: bool
     ema_tau: float
+    init_ema_target_as_zeros: bool = False

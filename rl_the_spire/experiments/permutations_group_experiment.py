@@ -143,6 +143,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         logger.info("Initializing EMA target encoder")
         target_encoder = copy.deepcopy(permutation_encoder)
         target_encoder.to(get_device(config.encoder.device))
+
+        # Initialize parameters to zeros if specified
+        if config.init_ema_target_as_zeros:
+            logger.info("Setting EMA target encoder parameters to zeros")
+            for param in target_encoder.parameters():
+                param.data.zero_()
+
         # Set to eval mode, we never train this directly
         target_encoder.eval()
 
