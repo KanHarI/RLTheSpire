@@ -35,6 +35,10 @@ from rl_the_spire.models.permutations.permutation_encoder import (
     PermutationEncoder,
     PermutationEncoderConfig,
 )
+from rl_the_spire.models.position_encodings.positional_grid_encoder import (
+    PositionalGridEncoder,
+    PositionalGridEncoderConfig,
+)
 from rl_the_spire.models.transformers.conv_transformer_body import (
     ConvTransformerBody,
     ConvTransformerBodyConfig,
@@ -247,6 +251,16 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     live_to_target_adapter = ConvTransformerBody(live_to_target_adapter_config)
     live_to_target_adapter.init_weights()
 
+    logger.info("Creating positional grid encoder...")
+    positional_grid_encoder_config = PositionalGridEncoderConfig(
+        n_embed=config.encoder.n_output_embed,
+        n_rows=config.encoder.n_output_rows,
+        n_cols=config.encoder.n_output_columns,
+        device=get_device(config.encoder.device),
+        dtype=get_dtype(config.encoder.dtype),
+    )
+    positional_grid_encoder = PositionalGridEncoder(positional_grid_encoder_config)
+
     # Explicitly ensure all model parameters are using the specified dtype and device
     device = get_device(config.encoder.device)
     dtype = get_dtype(config.encoder.dtype)
@@ -257,8 +271,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         list(permutation_encoder.parameters())
         + list(permutations_decoder.parameters())
         + list(inverter_network.parameters())
+        + list(denoiser_network.parameters())
         + list(composer_network.parameters())
         + list(live_to_target_adapter.parameters())
+        + list(positional_grid_encoder.parameters())
     )
     optimizer = torch.optim.AdamW(
         params,
@@ -334,6 +350,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             permutations_decoder.eval()
             inverter_network.eval()
             composer_network.eval()
+            positional_grid_encoder.eval()
+            denoiser_network.eval()
+            live_to_target_adapter.eval()
 
             with torch.no_grad():
                 # Sample new data for evaluation
@@ -374,19 +393,29 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
                 # Sample & decode
                 sampled_perm = denoiser_network(
-                    gamma_vae_sample(ep_perm_mus, ep_perm_logvars, config.vae.gamma)
+                    positional_grid_encoder(
+                        gamma_vae_sample(ep_perm_mus, ep_perm_logvars, config.vae.gamma)
+                    )
                 )
                 sampled_inv = denoiser_network(
-                    gamma_vae_sample(ep_inv_mus, ep_inv_logvars, config.vae.gamma)
+                    positional_grid_encoder(
+                        gamma_vae_sample(ep_inv_mus, ep_inv_logvars, config.vae.gamma)
+                    )
                 )
                 sampled_p = denoiser_network(
-                    gamma_vae_sample(ep_p_mus, ep_p_logvars, config.vae.gamma)
+                    positional_grid_encoder(
+                        gamma_vae_sample(ep_p_mus, ep_p_logvars, config.vae.gamma)
+                    )
                 )
                 sampled_q = denoiser_network(
-                    gamma_vae_sample(ep_q_mus, ep_q_logvars, config.vae.gamma)
+                    positional_grid_encoder(
+                        gamma_vae_sample(ep_q_mus, ep_q_logvars, config.vae.gamma)
+                    )
                 )
                 sampled_r = denoiser_network(
-                    gamma_vae_sample(ep_r_mus, ep_r_logvars, config.vae.gamma)
+                    positional_grid_encoder(
+                        gamma_vae_sample(ep_r_mus, ep_r_logvars, config.vae.gamma)
+                    )
                 )
 
                 # Inverter
@@ -491,15 +520,24 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 )
 
                 # Add the new loss for the 5 sampled permutations
-                latent_sampled_perm_losses = torch.tensor(0.0, device=device, dtype=dtype)
+                latent_sampled_perm_losses = torch.tensor(
+                    0.0, device=device, dtype=dtype
+                )
                 for sampled, target_mus in zip(
                     [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r],
-                    [target_perm_mus, target_inv_mus, target_p_mus, target_q_mus, target_r_mus]
+                    [
+                        target_perm_mus,
+                        target_inv_mus,
+                        target_p_mus,
+                        target_q_mus,
+                        target_r_mus,
+                    ],
                 ):
-                    latent_sampled_perm_losses += torch.norm(
-                        live_to_target_adapter(sampled) - target_mus, p=2
-                    ) / TOTAL_ENCODED_PERMUTATIONS  # Average over the permutations using the constant
-                
+                    latent_sampled_perm_losses += (
+                        torch.norm(live_to_target_adapter(sampled) - target_mus, p=2)
+                        / TOTAL_ENCODED_PERMUTATIONS
+                    )  # Average over the permutations using the constant
+
                 latent_sampled_perm_losses_weighted = (
                     latent_sampled_perm_losses
                     * config.latent_sampled_perm_loss_weight
@@ -559,6 +597,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         permutations_decoder.train()
         inverter_network.train()
         composer_network.train()
+        positional_grid_encoder.train()
+        denoiser_network.train()
+        live_to_target_adapter.train()
 
         perm, inv = next(inversions_dataloader)
         p, q, r = next(composition_dataloader)
@@ -604,19 +645,31 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Sample from the latent distribution
         sampled_perm = denoiser_network(
-            gamma_vae_sample(encoded_perm_mus, encoded_perm_logvars, config.vae.gamma)
+            positional_grid_encoder(
+                gamma_vae_sample(
+                    encoded_perm_mus, encoded_perm_logvars, config.vae.gamma
+                )
+            )
         )
         sampled_inv = denoiser_network(
-            gamma_vae_sample(encoded_inv_mus, encoded_inv_logvars, config.vae.gamma)
+            positional_grid_encoder(
+                gamma_vae_sample(encoded_inv_mus, encoded_inv_logvars, config.vae.gamma)
+            )
         )
         sampled_p = denoiser_network(
-            gamma_vae_sample(encoded_p_mus, encoded_p_logvars, config.vae.gamma)
+            positional_grid_encoder(
+                gamma_vae_sample(encoded_p_mus, encoded_p_logvars, config.vae.gamma)
+            )
         )
         sampled_q = denoiser_network(
-            gamma_vae_sample(encoded_q_mus, encoded_q_logvars, config.vae.gamma)
+            positional_grid_encoder(
+                gamma_vae_sample(encoded_q_mus, encoded_q_logvars, config.vae.gamma)
+            )
         )
         sampled_r = denoiser_network(
-            gamma_vae_sample(encoded_r_mus, encoded_r_logvars, config.vae.gamma)
+            positional_grid_encoder(
+                gamma_vae_sample(encoded_r_mus, encoded_r_logvars, config.vae.gamma)
+            )
         )
 
         # Inverter
@@ -726,18 +779,25 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             latent_comp_perm_loss_weighted = torch.tensor(
                 0.0, device=device, dtype=dtype
             )
-            
+
         # Add the new loss for the 5 sampled permutations
         if config.latent_sampled_perm_loss_weight > 0 and get_latent_weight(step) > 0:
             latent_sampled_perm_losses = torch.tensor(0.0, device=device, dtype=dtype)
             for sampled, target_mus in zip(
                 [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r],
-                [target_perm_mus, target_inv_mus, target_p_mus, target_q_mus, target_r_mus]
+                [
+                    target_perm_mus,
+                    target_inv_mus,
+                    target_p_mus,
+                    target_q_mus,
+                    target_r_mus,
+                ],
             ):
-                latent_sampled_perm_losses += torch.norm(
-                    live_to_target_adapter(sampled) - target_mus, p=2
-                ) / TOTAL_ENCODED_PERMUTATIONS  # Average over the permutations using the constant
-            
+                latent_sampled_perm_losses += (
+                    torch.norm(live_to_target_adapter(sampled) - target_mus, p=2)
+                    / TOTAL_ENCODED_PERMUTATIONS
+                )  # Average over the permutations using the constant
+
             latent_sampled_perm_losses_weighted = (
                 latent_sampled_perm_losses
                 * config.latent_sampled_perm_loss_weight
