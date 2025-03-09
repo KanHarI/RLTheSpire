@@ -626,25 +626,29 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 target_inv_mus, _ = permutation_encoder(inv)
                 target_r_mus, _ = permutation_encoder(r)
 
-        # Full L2 norm (not mean)
-        latent_inv_perm_loss = torch.norm(
-            live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
-        )
-        latent_inv_perm_loss_weighted = (
-            latent_inv_perm_loss
-            * config.latent_inv_perm_loss_weight
-            * get_latent_weight(step)
-        )
+        if config.latent_inv_perm_loss_weight > 0 and get_latent_weight(step) > 0:
+            latent_inv_perm_loss = torch.norm(
+                live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
+            )
+            latent_inv_perm_loss_weighted = (
+                latent_inv_perm_loss
+                * config.latent_inv_perm_loss_weight
+                * get_latent_weight(step)
+            )
+        else:
+            latent_inv_perm_loss_weighted = torch.tensor(0.0, device=device, dtype=dtype)
 
-        # Full L2 norm (not mean)
-        latent_comp_perm_loss = torch.norm(
-            live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
-        )
-        latent_comp_perm_loss_weighted = (
-            latent_comp_perm_loss
-            * config.latent_comp_perm_loss_weight
-            * get_latent_weight(step)
-        )
+        if config.latent_comp_perm_loss_weight > 0 and get_latent_weight(step) > 0:
+            latent_comp_perm_loss = torch.norm(
+                live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
+            )
+            latent_comp_perm_loss_weighted = (
+                latent_comp_perm_loss
+                * config.latent_comp_perm_loss_weight
+                * get_latent_weight(step)
+            )
+        else:
+            latent_comp_perm_loss_weighted = torch.tensor(0.0, device=device, dtype=dtype)
 
         # Combine total loss
         total_loss = (
