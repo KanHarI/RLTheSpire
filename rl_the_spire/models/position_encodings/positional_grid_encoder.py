@@ -47,9 +47,10 @@ class PositionalGridEncoder(torch.nn.Module):
             )
         )
 
+    def init_weights(self) -> None:
         # Initialize with small random values
-        torch.nn.init.normal_(self.row_embeddings, std=config.init_std)
-        torch.nn.init.normal_(self.col_embeddings, std=config.init_std)
+        torch.nn.init.normal_(self.row_embeddings, std=self.config.init_std)
+        torch.nn.init.normal_(self.col_embeddings, std=self.config.init_std)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -70,7 +71,3 @@ class PositionalGridEncoder(torch.nn.Module):
         # Add positional encodings to the input
         # The broadcasting will ensure row_pos is added to each column and col_pos to each row
         return x + row_pos + col_pos
-
-    def init_weights(self) -> None:
-        # Weights already initialized in __init__
-        pass

@@ -260,7 +260,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         dtype=get_dtype(config.encoder.dtype),
     )
     positional_grid_encoder = PositionalGridEncoder(positional_grid_encoder_config)
-
+    positional_grid_encoder.init_weights()
     # Explicitly ensure all model parameters are using the specified dtype and device
     device = get_device(config.encoder.device)
     dtype = get_dtype(config.encoder.dtype)
