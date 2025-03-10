@@ -336,12 +336,16 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     )
 
     def get_ema_tau(current_step: int) -> float:
-        # Linear decrease of EMA tau from start_value to final_value
+        # Harmonic decrease of EMA tau from start_value to final_value
         if current_step < config.ema_tau_warmup_steps:
+            # Using harmonic interpolation: 1/(alpha/a + (1-alpha)/b)
             alpha = float(current_step) / float(max(1, config.ema_tau_warmup_steps))
-            return config.ema_tau_start - alpha * (
-                config.ema_tau_start - config.ema_tau_final
-            )
+            start_inv = 1.0 / config.ema_tau_start
+            final_inv = 1.0 / config.ema_tau_final
+            # Interpolate in the reciprocal space
+            tau_inv = alpha * final_inv + (1.0 - alpha) * start_inv
+            # Convert back to the original space
+            return 1.0 / tau_inv
         return config.ema_tau_final
 
     if config.wandb_enabled:

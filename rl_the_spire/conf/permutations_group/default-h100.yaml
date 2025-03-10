@@ -31,7 +31,7 @@ optimizer:
 vae:
   gamma: 0.5
   kl_loss_weight: 0.001
-  kl_warmup_steps: 3000
+  kl_warmup_steps: 0
   kl_warmup_start_weight: 0.0
 conv_transformer:
   n_heads: 4
@@ -51,13 +51,13 @@ latent_inv_perm_loss_weight: 1.00
 latent_comp_perm_loss_weight: 1.00
 latent_sampled_perm_loss_weight: 1.00
 # Latent loss warmup params
-latent_warmup_steps: 5000
+latent_warmup_steps: 0
 latent_warmup_start_weight: 0.00
 latent_warmup_delay_steps: 0
 use_ema_target: true
 # EMA tau scheduling
-ema_tau_final: 0.005
+ema_tau_final: 0.01
 ema_tau_start: 0.05
-ema_tau_warmup_steps: 5000
+ema_tau_warmup_steps: 0
 ema_tau: ${ema_tau_final}
 init_ema_target_as_zeros: false
