@@ -31,13 +31,17 @@ from rl_the_spire.models.permutations.permutation_decoder import (
     PermutationDecoder,
     PermutationDecoderConfig,
 )
-from rl_the_spire.models.permutations.permutation_encoder import (
-    PermutationEncoder,
-    PermutationEncoderConfig,
+from rl_the_spire.models.permutations.permutation_grid_encoder import (
+    PermutationGridEncoder,
+    PermutationGridEncoderConfig,
 )
 from rl_the_spire.models.position_encodings.positional_grid_encoder import (
     PositionalGridEncoder,
     PositionalGridEncoderConfig,
+)
+from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
+    PositionalSequenceEncoder,
+    PositionalSequenceEncoderConfig,
 )
 from rl_the_spire.models.transformers.conv_transformer_body import (
     ConvTransformerBody,
@@ -119,7 +123,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     # 4. Create Models (Encoder/Decoder)
     logger.info("Creating permutation encoder...")
-    permutation_encoder_config = PermutationEncoderConfig(
+    permutation_encoder_config = PermutationGridEncoderConfig(
         n_max_permutation_size=config.dataset.n_max_permutation_size,
         n_embed=config.encoder.n_embed,
         n_heads=config.encoder.n_heads,
@@ -141,15 +145,32 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         conv_transformer_blocks=config.encoder.conv_blocks,
         sigma_output=config.encoder.sigma_output,
     )
-    permutation_encoder = PermutationEncoder(permutation_encoder_config)
+    permutation_encoder = PermutationGridEncoder(permutation_encoder_config)
     permutation_encoder.init_weights()
+
+    # Create the positional sequence encoder
+    logger.info("Creating positional sequence encoder...")
+    positional_seq_encoder_config = PositionalSequenceEncoderConfig(
+        n_embed=config.encoder.n_embed,
+        max_seq_len=config.dataset.n_max_permutation_size,
+        device=get_device(config.encoder.device),
+        dtype=get_dtype(config.encoder.dtype),
+        init_std=config.encoder.init_std,
+    )
+    positional_seq_encoder = PositionalSequenceEncoder(positional_seq_encoder_config)
+    positional_seq_encoder.init_weights()
 
     # Create target encoder if using EMA
     target_encoder = None
+    target_positional_encoder = None
     if config.use_ema_target:
         logger.info("Initializing EMA target encoder")
         target_encoder = copy.deepcopy(permutation_encoder)
         target_encoder.to(get_device(config.encoder.device))
+
+        logger.info("Initializing EMA target positional encoder")
+        target_positional_encoder = copy.deepcopy(positional_seq_encoder)
+        target_positional_encoder.to(get_device(config.encoder.device))
 
         # Initialize parameters to zeros if specified
         if config.init_ema_target_as_zeros:
@@ -157,8 +178,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             for param in target_encoder.parameters():
                 param.data.zero_()
 
+            logger.info("Setting EMA target positional encoder parameters to zeros")
+            for param in target_positional_encoder.parameters():
+                param.data.zero_()
+
         # Set to eval mode, we never train this directly
         target_encoder.eval()
+        target_positional_encoder.eval()
 
     logger.info("Creating denoiser network...")
     denoiser_network_config = ConvTransformerBodyConfig(
@@ -278,6 +304,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         + list(composer_network.parameters())
         + list(live_to_target_adapter.parameters())
         + list(positional_grid_encoder.parameters())
+        + list(positional_seq_encoder.parameters())
     )
     optimizer = torch.optim.AdamW(
         params,
@@ -331,8 +358,17 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             inverter_network.eval()
             composer_network.eval()
             positional_grid_encoder.eval()
+            positional_seq_encoder.eval()
             denoiser_network.eval()
             live_to_target_adapter.eval()
+
+            if (
+                config.use_ema_target
+                and target_encoder is not None
+                and target_positional_encoder is not None
+            ):
+                target_encoder.eval()
+                target_positional_encoder.eval()
 
             with torch.no_grad():
                 # Sample new data for evaluation
@@ -347,11 +383,21 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 eval_r = eval_r.to(device)
 
                 # Forward pass - always use the main encoder
-                ep_perm_mus, ep_perm_logvars = permutation_encoder(eval_perm)
-                ep_inv_mus, ep_inv_logvars = permutation_encoder(eval_inv)
-                ep_p_mus, ep_p_logvars = permutation_encoder(eval_p)
-                ep_q_mus, ep_q_logvars = permutation_encoder(eval_q)
-                ep_r_mus, ep_r_logvars = permutation_encoder(eval_r)
+                ep_perm_mus, ep_perm_logvars = permutation_encoder(
+                    positional_seq_encoder, eval_perm
+                )
+                ep_inv_mus, ep_inv_logvars = permutation_encoder(
+                    positional_seq_encoder, eval_inv
+                )
+                ep_p_mus, ep_p_logvars = permutation_encoder(
+                    positional_seq_encoder, eval_p
+                )
+                ep_q_mus, ep_q_logvars = permutation_encoder(
+                    positional_seq_encoder, eval_q
+                )
+                ep_r_mus, ep_r_logvars = permutation_encoder(
+                    positional_seq_encoder, eval_r
+                )
 
                 kl_losses_eval = torch.tensor(0.0, device=device, dtype=dtype)
                 for mus, logvars in zip(
@@ -407,27 +453,17 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 neural_inv_perm = inverter_network(sampled_perm)
                 neural_comp_perm = composer_network(sampled_p, sampled_q)
 
-                dec_perm = permutations_decoder(
-                    sampled_perm, permutation_encoder.embedder.pos_embedding
-                )
-                dec_inv = permutations_decoder(
-                    sampled_inv, permutation_encoder.embedder.pos_embedding
-                )
-                dec_p = permutations_decoder(
-                    sampled_p, permutation_encoder.embedder.pos_embedding
-                )
-                dec_q = permutations_decoder(
-                    sampled_q, permutation_encoder.embedder.pos_embedding
-                )
-                dec_r = permutations_decoder(
-                    sampled_r, permutation_encoder.embedder.pos_embedding
-                )
+                dec_perm = permutations_decoder(positional_seq_encoder, sampled_perm)
+                dec_inv = permutations_decoder(positional_seq_encoder, sampled_inv)
+                dec_p = permutations_decoder(positional_seq_encoder, sampled_p)
+                dec_q = permutations_decoder(positional_seq_encoder, sampled_q)
+                dec_r = permutations_decoder(positional_seq_encoder, sampled_r)
 
                 dec_neural_inv_perm = permutations_decoder(
-                    neural_inv_perm, permutation_encoder.embedder.pos_embedding
+                    positional_seq_encoder, neural_inv_perm
                 )
                 dec_neural_comp_perm = permutations_decoder(
-                    neural_comp_perm, permutation_encoder.embedder.pos_embedding
+                    positional_seq_encoder, neural_comp_perm
                 )
 
                 reconstruction_losses_eval = torch.tensor(
@@ -467,22 +503,46 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
                 # Add L2 losses in the latent space
                 # Use the target encoder for target values if available
-                if config.use_ema_target and target_encoder is not None:
+                if (
+                    config.use_ema_target
+                    and target_encoder is not None
+                    and target_positional_encoder is not None
+                ):
                     with torch.no_grad():
-                        target_inv_mus, _ = target_encoder(eval_inv)
-                        target_r_mus, _ = target_encoder(eval_r)
+                        target_inv_mus, _ = target_encoder(
+                            target_positional_encoder, eval_inv
+                        )
+                        target_r_mus, _ = target_encoder(
+                            target_positional_encoder, eval_r
+                        )
                         # Get target encodings for all 5 permutations for the new loss
-                        target_perm_mus, _ = target_encoder(eval_perm)
-                        target_p_mus, _ = target_encoder(eval_p)
-                        target_q_mus, _ = target_encoder(eval_q)
+                        target_perm_mus, _ = target_encoder(
+                            target_positional_encoder, eval_perm
+                        )
+                        target_p_mus, _ = target_encoder(
+                            target_positional_encoder, eval_p
+                        )
+                        target_q_mus, _ = target_encoder(
+                            target_positional_encoder, eval_q
+                        )
                 else:
                     with torch.no_grad():
-                        target_inv_mus, _ = permutation_encoder(eval_inv)
-                        target_r_mus, _ = permutation_encoder(eval_r)
+                        target_inv_mus, _ = permutation_encoder(
+                            positional_seq_encoder, eval_inv
+                        )
+                        target_r_mus, _ = permutation_encoder(
+                            positional_seq_encoder, eval_r
+                        )
                         # Get target encodings for all 5 permutations for the new loss
-                        target_perm_mus, _ = permutation_encoder(eval_perm)
-                        target_p_mus, _ = permutation_encoder(eval_p)
-                        target_q_mus, _ = permutation_encoder(eval_q)
+                        target_perm_mus, _ = permutation_encoder(
+                            positional_seq_encoder, eval_perm
+                        )
+                        target_p_mus, _ = permutation_encoder(
+                            positional_seq_encoder, eval_p
+                        )
+                        target_q_mus, _ = permutation_encoder(
+                            positional_seq_encoder, eval_q
+                        )
 
                 latent_inv_perm_loss = torch.norm(
                     live_to_target_adapter(positional_grid_encoder(neural_inv_perm))
@@ -617,6 +677,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         inverter_network.train()
         composer_network.train()
         positional_grid_encoder.train()
+        positional_seq_encoder.train()
         denoiser_network.train()
         live_to_target_adapter.train()
 
@@ -631,11 +692,21 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         r = r.to(device)
 
         # Forward pass
-        encoded_perm_mus, encoded_perm_logvars = permutation_encoder(perm)
-        encoded_inv_mus, encoded_inv_logvars = permutation_encoder(inv)
-        encoded_p_mus, encoded_p_logvars = permutation_encoder(p)
-        encoded_q_mus, encoded_q_logvars = permutation_encoder(q)
-        encoded_r_mus, encoded_r_logvars = permutation_encoder(r)
+        encoded_perm_mus, encoded_perm_logvars = permutation_encoder(
+            positional_seq_encoder, perm
+        )
+        encoded_inv_mus, encoded_inv_logvars = permutation_encoder(
+            positional_seq_encoder, inv
+        )
+        encoded_p_mus, encoded_p_logvars = permutation_encoder(
+            positional_seq_encoder, p
+        )
+        encoded_q_mus, encoded_q_logvars = permutation_encoder(
+            positional_seq_encoder, q
+        )
+        encoded_r_mus, encoded_r_logvars = permutation_encoder(
+            positional_seq_encoder, r
+        )
 
         # KL loss (averaged over the 5 permutations)
         kl_losses = torch.tensor(0.0, device=device, dtype=dtype)
@@ -700,26 +771,16 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         neural_inv_perm = inverter_network(sampled_perm)
         neural_comp_perm = composer_network(sampled_p, sampled_q)
         # Decode
-        decoded_perm = permutations_decoder(
-            sampled_perm, permutation_encoder.embedder.pos_embedding
-        )
-        decoded_inv = permutations_decoder(
-            sampled_inv, permutation_encoder.embedder.pos_embedding
-        )
-        decoded_p = permutations_decoder(
-            sampled_p, permutation_encoder.embedder.pos_embedding
-        )
-        decoded_q = permutations_decoder(
-            sampled_q, permutation_encoder.embedder.pos_embedding
-        )
-        decoded_r = permutations_decoder(
-            sampled_r, permutation_encoder.embedder.pos_embedding
-        )
+        decoded_perm = permutations_decoder(positional_seq_encoder, sampled_perm)
+        decoded_inv = permutations_decoder(positional_seq_encoder, sampled_inv)
+        decoded_p = permutations_decoder(positional_seq_encoder, sampled_p)
+        decoded_q = permutations_decoder(positional_seq_encoder, sampled_q)
+        decoded_r = permutations_decoder(positional_seq_encoder, sampled_r)
         dec_neural_inv_perm = permutations_decoder(
-            neural_inv_perm, permutation_encoder.embedder.pos_embedding
+            positional_seq_encoder, neural_inv_perm
         )
         dec_neural_comp_perm = permutations_decoder(
-            neural_comp_perm, permutation_encoder.embedder.pos_embedding
+            positional_seq_encoder, neural_comp_perm
         )
 
         # Reconstruction losses (averaged over 5 permutations)
@@ -759,22 +820,26 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Add L2 losses in the latent space
         # Use the target encoder for target values if available
-        if config.use_ema_target and target_encoder is not None:
+        if (
+            config.use_ema_target
+            and target_encoder is not None
+            and target_positional_encoder is not None
+        ):
             with torch.no_grad():
-                target_inv_mus, _ = target_encoder(inv)
-                target_r_mus, _ = target_encoder(r)
+                target_inv_mus, _ = target_encoder(target_positional_encoder, inv)
+                target_r_mus, _ = target_encoder(target_positional_encoder, r)
                 # Get target encodings for all 5 permutations for the new loss
-                target_perm_mus, _ = target_encoder(perm)
-                target_p_mus, _ = target_encoder(p)
-                target_q_mus, _ = target_encoder(q)
+                target_perm_mus, _ = target_encoder(target_positional_encoder, perm)
+                target_p_mus, _ = target_encoder(target_positional_encoder, p)
+                target_q_mus, _ = target_encoder(target_positional_encoder, q)
         else:
             with torch.no_grad():
-                target_inv_mus, _ = permutation_encoder(inv)
-                target_r_mus, _ = permutation_encoder(r)
+                target_inv_mus, _ = permutation_encoder(positional_seq_encoder, inv)
+                target_r_mus, _ = permutation_encoder(positional_seq_encoder, r)
                 # Get target encodings for all 5 permutations for the new loss
-                target_perm_mus, _ = permutation_encoder(perm)
-                target_p_mus, _ = permutation_encoder(p)
-                target_q_mus, _ = permutation_encoder(q)
+                target_perm_mus, _ = permutation_encoder(positional_seq_encoder, perm)
+                target_p_mus, _ = permutation_encoder(positional_seq_encoder, p)
+                target_q_mus, _ = permutation_encoder(positional_seq_encoder, q)
 
         if (
             config.latent_inv_perm_loss_weight > 0
@@ -903,10 +968,25 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         scheduler.step()
 
         # Update target network with EMA if enabled
-        if config.use_ema_target and target_encoder is not None:
+        if (
+            config.use_ema_target
+            and target_encoder is not None
+            and target_positional_encoder is not None
+        ):
             ema_update(
-                target_encoder,
                 permutation_encoder,
+                target_encoder,
+                get_ema_tau(
+                    step,
+                    config.ema_tau_warmup_steps,
+                    config.ema_tau_start,
+                    config.ema_tau_final,
+                ),
+            )
+
+            ema_update(
+                positional_seq_encoder,
+                target_positional_encoder,
                 get_ema_tau(
                     step,
                     config.ema_tau_warmup_steps,

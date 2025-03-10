@@ -2,6 +2,10 @@ import dataclasses
 
 import torch
 
+from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
+    PositionalSequenceEncoder,
+)
+
 
 @dataclasses.dataclass
 class PermutationEmbedderConfig:
@@ -25,37 +29,27 @@ class PermutationEmbedder(torch.nn.Module):
                 requires_grad=True,
             )
         )
-        # Learned positional encodings for positions [0, ..., n_max_permutation_size-1].
-        self.pos_embedding = torch.nn.Parameter(
-            torch.zeros(
-                config.n_max_permutation_size,
-                config.n_embed,
-                dtype=config.dtype,
-                device=config.device,
-                requires_grad=True,
-            )
-        )
 
     def init_weights(self) -> None:
         torch.nn.init.normal_(self.c_perm, std=self.config.init_std)
-        torch.nn.init.normal_(self.pos_embedding, std=self.config.init_std)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, pos_encoder: PositionalSequenceEncoder, x: torch.Tensor
+    ) -> torch.Tensor:
         """
         Args:
+            pos_encoder (PositionalSequenceEncoder): Positional sequence encoder to use instead of internal pos_embedding
             x (torch.Tensor): (batch_size, n_max_permutation_size) - indices of the permutation.
 
         Returns:
             torch.Tensor: (batch_size, n_max_permutation_size, n_embed) - candidate embeddings with added
-                          learned positional encodings.
+                          positional encodings.
         """
         # Lookup candidate embeddings based on the permutation indices.
         embeddings = self.c_perm[x]  # shape: (B, n_max_permutation_size, n_embed)
-        # Add the learned positional encoding (broadcast along batch dimension).
-        pos_enc = self.pos_embedding.unsqueeze(
-            0
-        )  # shape: (1, n_max_permutation_size, n_embed)
-        return embeddings + pos_enc
+
+        # Apply the provided positional encoder instead of using our internal pos_embedding
+        return pos_encoder(embeddings)  # type: ignore
 
     def get_logprobs(self, x: torch.Tensor) -> torch.Tensor:
         """
