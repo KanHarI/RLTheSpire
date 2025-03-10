@@ -24,7 +24,7 @@ encoder:
   sigma_output: false
 optimizer:
   lr: 1.0e-4
-  warmup_steps: 2000
+  warmup_steps: 5000
   beta1: 0.9
   beta2: 0.999
   weight_decay: 0.01
@@ -57,8 +57,8 @@ latent_warmup_start_weight: 0.00
 latent_warmup_delay_steps: 0
 use_ema_target: true
 # EMA tau scheduling
-ema_tau_final: 0.01
-ema_tau_start: 0.05
-ema_tau_warmup_steps: 0
+ema_tau_final: 0.005
+ema_tau_start: 0.5
+ema_tau_warmup_steps: 5000
 ema_tau: ${ema_tau_final}
 init_ema_target_as_zeros: false
