@@ -45,6 +45,8 @@ from rl_the_spire.models.transformers.conv_transformer_body import (
 )
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
 from rl_the_spire.models.vaes.kl_loss import kl_loss
+from rl_the_spire.utils.loss_utils import get_kl_weight, get_latent_weight
+from rl_the_spire.utils.training_utils import ema_update, get_ema_tau, lr_lambda
 
 # Configure logger
 logging.basicConfig(
@@ -284,18 +286,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         weight_decay=config.optimizer.weight_decay,
     )
 
-    # Create a learning rate scheduler with warmup
+    # Create scheduler with linear warmup
     logger.info(
-        f"Setting up LR scheduler with {config.optimizer.warmup_steps} warmup steps..."
+        f"Setting up learning rate scheduler with {config.optimizer.warmup_steps} warmup steps..."
     )
 
-    def lr_lambda(current_step: int) -> float:
-        # Linear warmup followed by constant learning rate
-        if current_step < config.optimizer.warmup_steps:
-            return float(current_step) / float(max(1, config.optimizer.warmup_steps))
-        return 1.0
-
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, lambda step: lr_lambda(step, config.optimizer.warmup_steps)
+    )
 
     # Function to calculate KL weight with warmup
     logger.info(
@@ -307,47 +305,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         f"Setting up latent loss warmup with {config.latent_warmup_delay_steps} delay steps followed by {config.latent_warmup_steps} warmup steps..."
     )
 
-    def get_kl_weight(current_step: int) -> float:
-        # Linear warmup of KL weight from start_weight to target weight
-        if current_step < config.vae.kl_warmup_steps:
-            alpha = float(current_step) / float(max(1, config.vae.kl_warmup_steps))
-            return config.vae.kl_warmup_start_weight + alpha * (
-                config.vae.kl_loss_weight - config.vae.kl_warmup_start_weight
-            )
-        return config.vae.kl_loss_weight
-
-    def get_latent_weight(current_step: int) -> float:
-        # Keep weight at 0 during delay period
-        if current_step < config.latent_warmup_delay_steps:
-            return 0.0
-
-        # Linear warmup of latent loss weights from start_weight to target weight
-        # after the delay period
-        warmup_step = current_step - config.latent_warmup_delay_steps
-        if warmup_step < config.latent_warmup_steps:
-            alpha = float(warmup_step) / float(max(1, config.latent_warmup_steps))
-            return config.latent_warmup_start_weight + alpha * (
-                1.0 - config.latent_warmup_start_weight
-            )
-        return 1.0
-
     # Function to calculate EMA tau with warmup
     logger.info(
         f"Setting up EMA tau warmup over {config.ema_tau_warmup_steps} steps from {config.ema_tau_start} to {config.ema_tau_final}..."
     )
-
-    def get_ema_tau(current_step: int) -> float:
-        # Harmonic decrease of EMA tau from start_value to final_value
-        if current_step < config.ema_tau_warmup_steps:
-            # Using harmonic interpolation: 1/(alpha/a + (1-alpha)/b)
-            alpha = float(current_step) / float(max(1, config.ema_tau_warmup_steps))
-            start_inv = 1.0 / config.ema_tau_start
-            final_inv = 1.0 / config.ema_tau_final
-            # Interpolate in the reciprocal space
-            tau_inv = alpha * final_inv + (1.0 - alpha) * start_inv
-            # Convert back to the original space
-            return 1.0 / tau_inv
-        return config.ema_tau_final
 
     if config.wandb_enabled:
         # 6. Initialize Weights & Biases
@@ -408,7 +369,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         / TOTAL_ENCODED_PERMUTATIONS
                     )
 
-                kl_losses_eval_weighted = kl_losses_eval * get_kl_weight(step)
+                kl_losses_eval_weighted = kl_losses_eval * get_kl_weight(
+                    step,
+                    config.vae.kl_warmup_steps,
+                    config.vae.kl_warmup_start_weight,
+                    config.vae.kl_loss_weight,
+                )
 
                 # Sample & decode
                 sampled_perm = denoiser_network(
@@ -527,7 +493,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 latent_inv_perm_loss_weighted = (
                     latent_inv_perm_loss
                     * config.latent_inv_perm_loss_weight
-                    * get_latent_weight(step)
+                    * get_latent_weight(
+                        step,
+                        config.latent_warmup_delay_steps,
+                        config.latent_warmup_steps,
+                        config.latent_warmup_start_weight,
+                    )
                 )
 
                 latent_comp_perm_loss = torch.norm(
@@ -539,7 +510,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 latent_comp_perm_loss_weighted = (
                     latent_comp_perm_loss
                     * config.latent_comp_perm_loss_weight
-                    * get_latent_weight(step)
+                    * get_latent_weight(
+                        step,
+                        config.latent_warmup_delay_steps,
+                        config.latent_warmup_steps,
+                        config.latent_warmup_start_weight,
+                    )
                 )
 
                 # Add the new loss for the 5 sampled permutations
@@ -569,7 +545,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 latent_sampled_perm_losses_weighted = (
                     latent_sampled_perm_losses
                     * config.latent_sampled_perm_loss_weight
-                    * get_latent_weight(step)
+                    * get_latent_weight(
+                        step,
+                        config.latent_warmup_delay_steps,
+                        config.latent_warmup_steps,
+                        config.latent_warmup_start_weight,
+                    )
                 )
 
                 total_loss_eval = (
@@ -589,8 +570,18 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "eval/total_loss": total_loss_eval.item(),
                         "eval/kl_loss": kl_losses_eval.item(),  # raw KL
                         "eval/kl_loss_weighted": kl_losses_eval_weighted.item(),
-                        "eval/kl_weight": get_kl_weight(step),
-                        "eval/latent_weight": get_latent_weight(step),
+                        "eval/kl_weight": get_kl_weight(
+                            step,
+                            config.vae.kl_warmup_steps,
+                            config.vae.kl_warmup_start_weight,
+                            config.vae.kl_loss_weight,
+                        ),
+                        "eval/latent_weight": get_latent_weight(
+                            step,
+                            config.latent_warmup_delay_steps,
+                            config.latent_warmup_steps,
+                            config.latent_warmup_start_weight,
+                        ),
                         "eval/reconstruction_loss": reconstruction_losses_eval.item(),
                         "eval/reconstruction_loss_weighted": reconstruction_losses_eval_weighted.item(),
                         "eval/neural_inv_perm_loss": neural_inv_perm_loss.item(),
@@ -669,7 +660,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             )
 
         # Weight it by config.vae.kl_loss_weight
-        kl_losses_weighted = kl_losses * get_kl_weight(step)
+        kl_losses_weighted = kl_losses * get_kl_weight(
+            step,
+            config.vae.kl_warmup_steps,
+            config.vae.kl_warmup_start_weight,
+            config.vae.kl_loss_weight,
+        )
 
         # Sample from the latent distribution
         sampled_perm = denoiser_network(
@@ -780,7 +776,16 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 target_p_mus, _ = permutation_encoder(p)
                 target_q_mus, _ = permutation_encoder(q)
 
-        if config.latent_inv_perm_loss_weight > 0 and get_latent_weight(step) > 0:
+        if (
+            config.latent_inv_perm_loss_weight > 0
+            and get_latent_weight(
+                step,
+                config.latent_warmup_delay_steps,
+                config.latent_warmup_steps,
+                config.latent_warmup_start_weight,
+            )
+            > 0
+        ):
             latent_inv_perm_loss = torch.norm(
                 live_to_target_adapter(positional_grid_encoder(neural_inv_perm))
                 - target_inv_mus,
@@ -790,14 +795,28 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             latent_inv_perm_loss_weighted = (
                 latent_inv_perm_loss
                 * config.latent_inv_perm_loss_weight
-                * get_latent_weight(step)
+                * get_latent_weight(
+                    step,
+                    config.latent_warmup_delay_steps,
+                    config.latent_warmup_steps,
+                    config.latent_warmup_start_weight,
+                )
             )
         else:
             latent_inv_perm_loss_weighted = torch.tensor(
                 0.0, device=device, dtype=dtype
             )
 
-        if config.latent_comp_perm_loss_weight > 0 and get_latent_weight(step) > 0:
+        if (
+            config.latent_comp_perm_loss_weight > 0
+            and get_latent_weight(
+                step,
+                config.latent_warmup_delay_steps,
+                config.latent_warmup_steps,
+                config.latent_warmup_start_weight,
+            )
+            > 0
+        ):
             latent_comp_perm_loss = torch.norm(
                 live_to_target_adapter(positional_grid_encoder(neural_comp_perm))
                 - target_r_mus,
@@ -807,7 +826,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             latent_comp_perm_loss_weighted = (
                 latent_comp_perm_loss
                 * config.latent_comp_perm_loss_weight
-                * get_latent_weight(step)
+                * get_latent_weight(
+                    step,
+                    config.latent_warmup_delay_steps,
+                    config.latent_warmup_steps,
+                    config.latent_warmup_start_weight,
+                )
             )
         else:
             latent_comp_perm_loss_weighted = torch.tensor(
@@ -815,7 +839,16 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             )
 
         # Add the new loss for the 5 sampled permutations
-        if config.latent_sampled_perm_loss_weight > 0 and get_latent_weight(step) > 0:
+        if (
+            config.latent_sampled_perm_loss_weight > 0
+            and get_latent_weight(
+                step,
+                config.latent_warmup_delay_steps,
+                config.latent_warmup_steps,
+                config.latent_warmup_start_weight,
+            )
+            > 0
+        ):
             latent_sampled_perm_losses = torch.tensor(0.0, device=device, dtype=dtype)
             for sampled, target_mus in zip(
                 [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r],
@@ -840,7 +873,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             latent_sampled_perm_losses_weighted = (
                 latent_sampled_perm_losses
                 * config.latent_sampled_perm_loss_weight
-                * get_latent_weight(step)
+                * get_latent_weight(
+                    step,
+                    config.latent_warmup_delay_steps,
+                    config.latent_warmup_steps,
+                    config.latent_warmup_start_weight,
+                )
             )
         else:
             latent_sampled_perm_losses_weighted = torch.tensor(
@@ -866,12 +904,38 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Update target network with EMA if enabled
         if config.use_ema_target and target_encoder is not None:
-            ema_update(target_encoder, permutation_encoder, get_ema_tau(step))
+            ema_update(
+                target_encoder,
+                permutation_encoder,
+                get_ema_tau(
+                    step,
+                    config.ema_tau_warmup_steps,
+                    config.ema_tau_start,
+                    config.ema_tau_final,
+                ),
+            )
 
         # Log training losses
         if step % config.log_interval == 0:
             current_lr = scheduler.get_last_lr()[0]
-            current_kl_weight = get_kl_weight(step)
+            current_kl_weight = get_kl_weight(
+                step,
+                config.vae.kl_warmup_steps,
+                config.vae.kl_warmup_start_weight,
+                config.vae.kl_loss_weight,
+            )
+            current_latent_weight = get_latent_weight(
+                step,
+                config.latent_warmup_delay_steps,
+                config.latent_warmup_steps,
+                config.latent_warmup_start_weight,
+            )
+            current_ema_tau = get_ema_tau(
+                step,
+                config.ema_tau_warmup_steps,
+                config.ema_tau_start,
+                config.ema_tau_final,
+            )
             if config.wandb_enabled:
                 wandb.log(
                     {
@@ -890,10 +954,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/latent_sampled_perm_losses_weighted": latent_sampled_perm_losses_weighted.item(),
                         "train/learning_rate": current_lr,
                         "train/kl_weight": current_kl_weight,
-                        "train/latent_weight": get_latent_weight(step),
-                        "train/ema_tau": (
-                            get_ema_tau(step) if config.use_ema_target else 0.0
-                        ),
+                        "train/latent_weight": current_latent_weight,
+                        "train/ema_tau": current_ema_tau,
                     },
                     step=step,
                 )
@@ -911,26 +973,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             )
 
     return 0
-
-
-def ema_update(
-    target_model: torch.nn.Module, source_model: torch.nn.Module, tau: float
-) -> None:
-    """
-    Update the target model parameters with the source model parameters using EMA.
-
-    Args:
-        target_model: The target model to be updated
-        source_model: The source model to update from
-        tau: The update factor (small value for slow updates)
-    """
-    with torch.no_grad():
-        for target_param, source_param in zip(
-            target_model.parameters(), source_model.parameters()
-        ):
-            target_param.data.copy_(
-                tau * source_param.data + (1.0 - tau) * target_param.data
-            )
 
 
 if __name__ == "__main__":
