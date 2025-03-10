@@ -11,9 +11,9 @@ from rl_the_spire.models.transformers.attention_to_tensor import (
     AttentionToTensor,
     AttentionToTensorConfig,
 )
-from rl_the_spire.models.transformers.conv_transformer_block import (
-    ConvTransformerBlock,
-    ConvTransformerBlockConfig,
+from rl_the_spire.models.transformers.conv_transformer_body import (
+    ConvTransformerBody,
+    ConvTransformerBodyConfig,
 )
 from rl_the_spire.models.transformers.transformer_body import (
     TransformerBody,
@@ -41,6 +41,7 @@ class PermutationEncoderConfig:
     conv_transformer_n_heads: int
     activation: Callable[[torch.Tensor], torch.Tensor]
     linear_size_multiplier: int
+    conv_transformer_blocks: int
     sigma_output: bool = True
 
 
@@ -89,7 +90,10 @@ class PermutationEncoder(torch.nn.Module):
             mlp_dropout=config.mlp_dropout,
         )
         self.attention_to_tensor = AttentionToTensor(attention_to_tensor_config)
-        conv_transfomer_block_config = ConvTransformerBlockConfig(
+
+        # Replace single ConvTransformerBlock with ConvTransformerBody
+        conv_transformer_body_config = ConvTransformerBodyConfig(
+            n_blocks=config.conv_transformer_blocks,
             n_embed=config.n_output_embed
             * (
                 2 if config.sigma_output else 1
@@ -105,13 +109,13 @@ class PermutationEncoder(torch.nn.Module):
             init_std=config.init_std,
             ln_eps=config.ln_eps,
         )
-        self.conv_transformer_block = ConvTransformerBlock(conv_transfomer_block_config)
+        self.conv_transformer_body = ConvTransformerBody(conv_transformer_body_config)
 
     def init_weights(self) -> None:
         self.embedder.init_weights()
         self.transformer_body.init_weights()
         self.attention_to_tensor.init_weights()
-        self.conv_transformer_block.init_weights()
+        self.conv_transformer_body.init_weights()
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -127,7 +131,7 @@ class PermutationEncoder(torch.nn.Module):
         x = self.embedder(x)
         x = self.transformer_body(x, extra_embed=torch.zeros_like(x[:, :, :0]))
         x = self.attention_to_tensor(x)
-        x = self.conv_transformer_block(x)
+        x = self.conv_transformer_body(x)
 
         if self.config.sigma_output:
             # Turn into (batch_size, n_output_rows, n_output_columns, n_output_embed, 2)

@@ -136,6 +136,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         activation=get_activation(config.encoder.activation),
         linear_size_multiplier=config.encoder.linear_size_multiplier,
         conv_transformer_n_heads=config.conv_transformer.n_heads,
+        conv_transformer_blocks=config.conv_transformer.denoiser_blocks,
         sigma_output=config.encoder.sigma_output,
     )
     permutation_encoder = PermutationEncoder(permutation_encoder_config)
@@ -159,7 +160,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     logger.info("Creating denoiser network...")
     denoiser_network_config = ConvTransformerBodyConfig(
-        n_blocks=1,
+        n_blocks=config.conv_transformer.denoiser_blocks,
         n_embed=config.encoder.n_output_embed,
         n_heads=config.conv_transformer.n_heads,
         attn_dropout=config.encoder.attn_dropout,

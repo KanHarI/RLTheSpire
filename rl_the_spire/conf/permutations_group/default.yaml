@@ -35,6 +35,7 @@ vae:
   kl_warmup_start_weight: 0.0
 conv_transformer:
   n_heads: 4
+  denoiser_blocks: 1
 inverter_network:
   n_layers: 3
 composer_network:
