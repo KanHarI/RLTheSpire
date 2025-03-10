@@ -22,6 +22,7 @@ encoder:
   activation: "gelu"
   linear_size_multiplier: 4
   sigma_output: false
+  conv_blocks: 1
 optimizer:
   lr: 2.0e-4
   warmup_steps: 100

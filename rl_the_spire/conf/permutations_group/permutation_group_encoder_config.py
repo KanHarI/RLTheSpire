@@ -20,3 +20,4 @@ class PermutationGroupEncoderConfig:
     activation: str
     linear_size_multiplier: int
     sigma_output: bool = True
+    conv_blocks: int = 1
