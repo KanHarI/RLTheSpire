@@ -2,7 +2,7 @@ import dataclasses
 
 
 @dataclasses.dataclass
-class PermutationGroupOptimizerConfig:
+class OptimizerConfig:
     lr: float
     warmup_steps: int
     beta1: float

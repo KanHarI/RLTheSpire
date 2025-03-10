@@ -9,8 +9,8 @@ import torch
 from torch.utils.data import DataLoader
 
 import wandb
-from rl_the_spire.conf.permutations_group.permutation_group_experiment_config import (
-    PermutationGroupExperimentConfig,
+from rl_the_spire.conf.permutations_group.grid.permutation_group_grid_experiment_config import (
+    PermutationGroupGridExperimentConfig,
 )
 from rl_the_spire.conf.utils.activations import get_activation
 from rl_the_spire.conf.utils.devices import get_device
@@ -61,14 +61,14 @@ logger = logging.getLogger(__name__)
 
 
 @hydra.main(
-    config_path="../conf/permutations_group",  # Adjust path if needed
+    config_path="../conf/permutations_group/grid",  # Adjust path if needed
     config_name="default",  # The name of your .yaml file, e.g. "default.yaml"
     version_base=None,
 )
 def main(hydra_cfg: dict[Any, Any]) -> int:
     # 1. Parse the Hydra config into our dataclasses
-    config: PermutationGroupExperimentConfig = dacite.from_dict(
-        data_class=PermutationGroupExperimentConfig,
+    config: PermutationGroupGridExperimentConfig = dacite.from_dict(
+        data_class=PermutationGroupGridExperimentConfig,
         data=hydra_cfg,
     )
 

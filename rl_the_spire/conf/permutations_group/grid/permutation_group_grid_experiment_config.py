@@ -1,37 +1,37 @@
 import dataclasses
 
-from rl_the_spire.conf.permutations_group.permutation_group_composer_network_config import (
-    PermutationGroupComposerNetworkConfig,
+from rl_the_spire.conf.common.optimizer_config import (
+    OptimizerConfig,
 )
-from rl_the_spire.conf.permutations_group.permutation_group_conv_transformer_config import (
+from rl_the_spire.conf.common.vae_config import (
+    VAEConfig,
+)
+from rl_the_spire.conf.permutations_group.grid.permutation_group_conv_transformer_config import (
     PermutationGroupConvTransformerConfig,
+)
+from rl_the_spire.conf.permutations_group.grid.permutation_group_grid_composer_network_config import (
+    PermutationGroupGridComposerNetworkConfig,
+)
+from rl_the_spire.conf.permutations_group.grid.permutation_group_grid_encoder_config import (
+    PermutationGroupEncoderConfig,
 )
 from rl_the_spire.conf.permutations_group.permutation_group_dataset_config import (
     PermutationGroupDatasetConfig,
 )
-from rl_the_spire.conf.permutations_group.permutation_group_encoder_config import (
-    PermutationGroupEncoderConfig,
-)
 from rl_the_spire.conf.permutations_group.permutation_group_inverter_network_config import (
     PermutationGroupInverterNetworkConfig,
-)
-from rl_the_spire.conf.permutations_group.permutation_group_optimizer_config import (
-    PermutationGroupOptimizerConfig,
-)
-from rl_the_spire.conf.permutations_group.permutation_group_vae_config import (
-    PermutationGroupVAEConfig,
 )
 
 
 @dataclasses.dataclass
-class PermutationGroupExperimentConfig:
+class PermutationGroupGridExperimentConfig:
     dataset: PermutationGroupDatasetConfig
     encoder: PermutationGroupEncoderConfig
-    vae: PermutationGroupVAEConfig
+    vae: VAEConfig
     conv_transformer: PermutationGroupConvTransformerConfig
     inverter_network: PermutationGroupInverterNetworkConfig
-    composer_network: PermutationGroupComposerNetworkConfig
-    optimizer: PermutationGroupOptimizerConfig
+    composer_network: PermutationGroupGridComposerNetworkConfig
+    optimizer: OptimizerConfig
     iterations: int
     eval_interval: int
     experiment_name: str

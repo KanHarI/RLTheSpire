@@ -2,5 +2,5 @@ import dataclasses
 
 
 @dataclasses.dataclass
-class PermutationGroupComposerNetworkConfig:
+class PermutationGroupGridComposerNetworkConfig:
     n_layers: int

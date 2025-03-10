@@ -7,4 +7,3 @@ class PermutationGroupLiveToTargetAdapterConfig:
     linear_size_multiplier: int
     activation: str
     dropout: float
-    use_adapter: bool
