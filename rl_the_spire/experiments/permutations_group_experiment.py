@@ -27,9 +27,9 @@ from rl_the_spire.models.permutations.permutation_composer import (
     PermutationComposer,
     PermutationComposerConfig,
 )
-from rl_the_spire.models.permutations.permutation_decoder import (
-    PermutationDecoder,
-    PermutationDecoderConfig,
+from rl_the_spire.models.permutations.permutation_grid_decoder import (
+    PermutationGridDecoder,
+    PermutationGridDecoderConfig,
 )
 from rl_the_spire.models.permutations.permutation_grid_encoder import (
     PermutationGridEncoder,
@@ -204,7 +204,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     denoiser_network.init_weights()
 
     logger.info("Creating permutations decoder...")
-    permutations_decoder_config = PermutationDecoderConfig(
+    permutations_decoder_config = PermutationGridDecoderConfig(
         n_embed_grid=config.encoder.n_output_embed,
         n_embed_sequence=config.encoder.n_embed,
         n_grid_rows=config.encoder.n_output_rows,
@@ -223,7 +223,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         resid_dropout=config.encoder.resid_dropout,
         mlp_dropout=config.encoder.mlp_dropout,
     )
-    permutations_decoder = PermutationDecoder(permutations_decoder_config)
+    permutations_decoder = PermutationGridDecoder(permutations_decoder_config)
     permutations_decoder.init_weights()
 
     logger.info("Creating inverter network...")

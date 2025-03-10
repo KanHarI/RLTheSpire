@@ -21,7 +21,7 @@ from rl_the_spire.models.transformers.transformer_body import (
 
 
 @dataclasses.dataclass
-class PermutationDecoderConfig:
+class PermutationGridDecoderConfig:
     n_embed_grid: int
     n_embed_sequence: int
     n_grid_rows: int
@@ -41,8 +41,8 @@ class PermutationDecoderConfig:
     mlp_dropout: float
 
 
-class PermutationDecoder(torch.nn.Module):
-    def __init__(self, config: PermutationDecoderConfig):
+class PermutationGridDecoder(torch.nn.Module):
+    def __init__(self, config: PermutationGridDecoderConfig):
         super().__init__()
         self.config = config
 
