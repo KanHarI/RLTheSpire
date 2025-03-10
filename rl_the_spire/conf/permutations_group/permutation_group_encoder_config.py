@@ -19,3 +19,5 @@ class PermutationGroupEncoderConfig:
     n_output_columns: int
     activation: str
     linear_size_multiplier: int
+    sigma_output: bool = True
+    conv_blocks: int = 1

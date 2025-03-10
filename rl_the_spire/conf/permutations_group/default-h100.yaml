@@ -21,23 +21,27 @@ encoder:
   n_output_columns: 8
   activation: "gelu"
   linear_size_multiplier: 4
+  sigma_output: false
+  conv_blocks: 2
 optimizer:
   lr: 1.0e-4
-  warmup_steps: 2000
+  warmup_steps: 5000
   beta1: 0.9
   beta2: 0.999
   weight_decay: 0.01
 vae:
   gamma: 0.5
-  kl_loss_weight: 0.01
-  kl_warmup_steps: 20000
+  kl_loss_weight: 0.001
+  kl_warmup_steps: 0
   kl_warmup_start_weight: 0.0
 conv_transformer:
   n_heads: 4
+  denoiser_blocks: 2
 inverter_network:
   n_layers: 4
 composer_network:
   n_layers: 6
+num_live_to_target_adapter_layers: 2
 iterations: 100000
 eval_interval: 100
 experiment_name: "permutations_group_h100_gpu"  # Updated experiment name
@@ -46,7 +50,17 @@ log_interval: 100
 reconstruction_loss_weight: 1.0
 neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
-latent_inv_perm_loss_weight: 0.01
-latent_comp_perm_loss_weight: 0.01
+latent_inv_perm_loss_weight: 1.00
+latent_comp_perm_loss_weight: 1.00
+latent_sampled_perm_loss_weight: 1.00
+# Latent loss warmup params
+latent_warmup_steps: 0
+latent_warmup_start_weight: 0.00
+latent_warmup_delay_steps: 0
 use_ema_target: true
-ema_tau: 0.005
+# EMA tau scheduling
+ema_tau_final: 0.005
+ema_tau_start: 0.5
+ema_tau_warmup_steps: 5000
+ema_tau: ${ema_tau_final}
+init_ema_target_as_zeros: false

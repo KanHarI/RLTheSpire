@@ -21,6 +21,8 @@ encoder:
   n_output_columns: 8
   activation: "gelu"
   linear_size_multiplier: 4
+  sigma_output: false
+  conv_blocks: 1
 optimizer:
   lr: 2.0e-4
   warmup_steps: 100
@@ -34,10 +36,12 @@ vae:
   kl_warmup_start_weight: 0.0
 conv_transformer:
   n_heads: 4
+  denoiser_blocks: 1
 inverter_network:
   n_layers: 3
 composer_network:
   n_layers: 3
+num_live_to_target_adapter_layers: 1
 iterations: 10000
 eval_interval: 100
 experiment_name: "permutations_group_cpu_default"
@@ -48,5 +52,15 @@ neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
 latent_inv_perm_loss_weight: 0.01
 latent_comp_perm_loss_weight: 0.01
+latent_sampled_perm_loss_weight: 0.01
+# Latent loss warmup params
+latent_warmup_steps: 0
+latent_warmup_start_weight: 0.0
+latent_warmup_delay_steps: 0
 use_ema_target: true
-ema_tau: 0.005
+# EMA tau scheduling
+ema_tau_final: 0.005  # Final tau value (same as current fixed value)
+ema_tau_start: 0.05   # Initial higher tau value
+ema_tau_warmup_steps: 5000  # Steps to decrease from start to final value
+ema_tau: ${ema_tau_final}  # Keeping for backward compatibility
+init_ema_target_as_zeros: false
