@@ -513,20 +513,18 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         target_p_mus, _ = permutation_encoder(eval_p)
                         target_q_mus, _ = permutation_encoder(eval_q)
 
-                # Full L2 norm (not mean)
                 latent_inv_perm_loss = torch.norm(
-                    live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
-                )
+                    live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2, dim=1
+                ).mean()
                 latent_inv_perm_loss_weighted = (
                     latent_inv_perm_loss
                     * config.latent_inv_perm_loss_weight
                     * get_latent_weight(step)
                 )
 
-                # Full L2 norm (not mean)
                 latent_comp_perm_loss = torch.norm(
-                    live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
-                )
+                    live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2, dim=1
+                ).mean()
                 latent_comp_perm_loss_weighted = (
                     latent_comp_perm_loss
                     * config.latent_comp_perm_loss_weight
@@ -548,7 +546,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     ],
                 ):
                     latent_sampled_perm_losses += (
-                        torch.norm(live_to_target_adapter(sampled) - target_mus, p=2)
+                        torch.norm(live_to_target_adapter(sampled) - target_mus, p=2, dim=1).mean()
                         / TOTAL_ENCODED_PERMUTATIONS
                     )  # Average over the permutations using the constant
 
@@ -768,8 +766,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         if config.latent_inv_perm_loss_weight > 0 and get_latent_weight(step) > 0:
             latent_inv_perm_loss = torch.norm(
-                live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2
-            )
+                live_to_target_adapter(neural_inv_perm) - target_inv_mus, p=2, dim=1
+            ).mean()
             latent_inv_perm_loss_weighted = (
                 latent_inv_perm_loss
                 * config.latent_inv_perm_loss_weight
@@ -782,8 +780,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         if config.latent_comp_perm_loss_weight > 0 and get_latent_weight(step) > 0:
             latent_comp_perm_loss = torch.norm(
-                live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2
-            )
+                live_to_target_adapter(neural_comp_perm) - target_r_mus, p=2, dim=1
+            ).mean()
             latent_comp_perm_loss_weighted = (
                 latent_comp_perm_loss
                 * config.latent_comp_perm_loss_weight
@@ -808,7 +806,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 ],
             ):
                 latent_sampled_perm_losses += (
-                    torch.norm(live_to_target_adapter(sampled) - target_mus, p=2)
+                    torch.norm(live_to_target_adapter(sampled) - target_mus, p=2, dim=1).mean()
                     / TOTAL_ENCODED_PERMUTATIONS
                 )  # Average over the permutations using the constant
 
