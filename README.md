@@ -43,19 +43,19 @@ Key differences in the H100 configuration:
 To run an experiment with the default CPU configuration:
 
 ```bash
-python -m rl_the_spire.experiments.permutations_group_experiment
+python -m rl_the_spire.experiments.permutations_group_grid_experiment
 ```
 
 To run with the H100 GPU configuration:
 
 ```bash
-python -m rl_the_spire.experiments.permutations_group_experiment --config-name default-h100
+python -m rl_the_spire.experiments.permutations_group_grid_experiment --config-name default-h100
 ```
 
 You can also override specific configuration parameters:
 
 ```bash
-python -m rl_the_spire.experiments.permutations_group_experiment encoder.device=cuda dataset.batch_size=512
+python -m rl_the_spire.experiments.permutations_group_grid_experiment encoder.device=cuda dataset.batch_size=512
 ```
 
 ## Monitoring
