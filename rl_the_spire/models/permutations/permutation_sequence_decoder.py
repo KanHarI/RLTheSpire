@@ -71,7 +71,7 @@ class PermutationSequenceDecoder(torch.nn.Module):
             padding = torch.zeros(
                 (x.size(0), self.config.n_max_permutation_size - x.size(1), x.size(2)),
                 device=x.device,
-                dtype=x.dtype
+                dtype=x.dtype,
             )
             x = torch.cat([x, padding], dim=1)
         elif x.size(1) > self.config.n_max_permutation_size:
@@ -81,5 +81,5 @@ class PermutationSequenceDecoder(torch.nn.Module):
 
         # Pass through transformer
         output = self.transformer(x, extra_embed=torch.zeros_like(x[:, :, :0]))
-        
-        return output 
+
+        return output  # type: ignore
