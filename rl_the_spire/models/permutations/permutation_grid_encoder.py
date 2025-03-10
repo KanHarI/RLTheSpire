@@ -45,7 +45,7 @@ class PermutationGridEncoderConfig:
     activation: Callable[[torch.Tensor], torch.Tensor]
     linear_size_multiplier: int
     conv_transformer_blocks: int
-    sigma_output: bool = True
+    sigma_output: bool
 
 
 class PermutationGridEncoder(torch.nn.Module):
