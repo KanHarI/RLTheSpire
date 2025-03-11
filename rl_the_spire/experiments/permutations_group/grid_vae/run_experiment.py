@@ -19,6 +19,7 @@ from rl_the_spire.experiments.permutations_group.grid_vae.create_models import (
     create_target_models,
 )
 from rl_the_spire.experiments.permutations_group.grid_vae.training_loop_iteration import (
+    TrainingLoopInput,
     training_loop_iteration,
 )
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
@@ -77,6 +78,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     target_encoder, target_positional_encoder = create_target_models(
         config, device, permutation_encoder, positional_seq_encoder
     )
+    if target_encoder is None:
+        target_encoder = permutation_encoder
+    if target_positional_encoder is None:
+        target_positional_encoder = positional_seq_encoder
 
     # params_for_optimizer = (
     #     list(permutation_encoder.parameters())
@@ -148,9 +153,17 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
             with torch.no_grad():
                 training_loop_iteration(
-                    learned_networks_tuple,
-                    (inversions_dataloader, composition_dataloader),
-                    device,
+                    TrainingLoopInput(
+                        learned_networks_tuple=learned_networks_tuple,
+                        target_networks_tuple=(
+                            target_encoder,
+                            target_positional_encoder,
+                        ),
+                        dataloaders=(inversions_dataloader, composition_dataloader),
+                        vae_gamma=config.vae.gamma,
+                        device=device,
+                        dtype=dtype,
+                    )
                 )
                 # Sample new data for evaluation
                 eval_perm, eval_inv = next(inversions_dataloader)
