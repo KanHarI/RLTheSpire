@@ -57,6 +57,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     device = get_device(config.encoder.device)
     dtype = get_dtype(config.encoder.dtype)
 
+    learned_networks_tuple = create_models(config, device, dtype)
+    
     (
         permutation_encoder,
         positional_seq_encoder,
@@ -66,23 +68,27 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         composer_network,
         live_to_target_adapter,
         positional_grid_encoder,
-    ) = create_models(config, device, dtype)
+    ) = learned_networks_tuple
 
-    params_for_optimizer = (
-        list(permutation_encoder.parameters())
-        + list(positional_seq_encoder.parameters())
-        + list(denoiser_network.parameters())
-        + list(permutations_decoder.parameters())
-        + list(inverter_network.parameters())
-        + list(composer_network.parameters())
-        + list(live_to_target_adapter.parameters())
-        + list(positional_grid_encoder.parameters())
-    )
-
-    # Create target encoder and positional sequence encoder if using EMA
+    # Create EMA target models if enabled
     target_encoder, target_positional_encoder = create_target_models(
         config, device, permutation_encoder, positional_seq_encoder
     )
+
+    # params_for_optimizer = (
+    #     list(permutation_encoder.parameters())
+    #     + list(positional_seq_encoder.parameters())
+    #     + list(denoiser_network.parameters())
+    #     + list(permutations_decoder.parameters())
+    #     + list(inverter_network.parameters())
+    #     + list(composer_network.parameters())
+    #     + list(live_to_target_adapter.parameters())
+    #     + list(positional_grid_encoder.parameters())
+    # )
+
+    params_for_optimizer = [
+        param for model in learned_networks_tuple for param in model.parameters()
+    ]
 
     # 5. Create an optimizer
     logger.info("Creating AdamW optimizer...")
@@ -102,6 +108,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         optimizer, lambda step: lr_lambda(step, config.optimizer.warmup_steps)
     )
 
+    # Log about warmups here, implement them in the training loop
     # Function to calculate KL weight with warmup
     logger.info(
         f"Setting up KL weight warmup over {config.vae.kl_warmup_steps} steps from {config.vae.kl_warmup_start_weight} to {config.vae.kl_loss_weight}..."
