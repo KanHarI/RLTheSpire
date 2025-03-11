@@ -44,7 +44,7 @@ composer_network:
 num_live_to_target_adapter_layers: 1
 iterations: 10000
 eval_interval: 100
-experiment_name: "permutations_group_cpu_default"
+experiment_name: "permutations_group_grid_vae_cpu_default"
 wandb_enabled: true
 log_interval: 20
 reconstruction_loss_weight: 1.0

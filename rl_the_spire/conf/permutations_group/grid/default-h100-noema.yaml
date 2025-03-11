@@ -44,7 +44,7 @@ composer_network:
 num_live_to_target_adapter_layers: 2
 iterations: 100000
 eval_interval: 100
-experiment_name: "permutations_group_h100_gpu_no_ema"  # Updated experiment name
+experiment_name: "permutations_group_grid_vae_h100_gpu_no_ema"  # Updated experiment name
 wandb_enabled: true
 log_interval: 100
 reconstruction_loss_weight: 1.0

@@ -1,12 +1,10 @@
 import copy
 import logging
-import platform
 from typing import Any
 
 import dacite
 import hydra
 import torch
-from torch.utils.data import DataLoader
 
 import wandb
 from rl_the_spire.conf.permutations_group.grid.permutation_group_grid_experiment_config import (
@@ -15,13 +13,8 @@ from rl_the_spire.conf.permutations_group.grid.permutation_group_grid_experiment
 from rl_the_spire.conf.utils.activations import get_activation
 from rl_the_spire.conf.utils.devices import get_device
 from rl_the_spire.conf.utils.dtypes import get_dtype
-from rl_the_spire.datasets.composed_permutations_dataset import (
-    ComposedPermutationDataset,
-    ComposedPermutationDatasetConfig,
-)
-from rl_the_spire.datasets.permutation_and_inverse_dataset import (
-    PermutationAndInverseDataset,
-    PermutationInverseDatasetConfig,
+from rl_the_spire.experiments.permutations_group.common.create_dataloaders import (
+    create_dataloaders,
 )
 from rl_the_spire.models.permutations.permutation_composer import (
     PermutationComposer,
@@ -57,6 +50,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,52 +68,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     logger.info("Initializing experiment...")
 
+    inversions_dataloader, composition_dataloader = create_dataloaders(config.dataset)
+
     TOTAL_ENCODED_PERMUTATIONS = 5  # constant used to average out loss components
-
-    # 2. Create Datasets
-    logger.info("Creating inversion dataset config...")
-    inversions_dataset_config = PermutationInverseDatasetConfig(
-        n_max_permutation_size=config.dataset.n_max_permutation_size,
-        gamma=config.dataset.gamma,
-    )
-
-    logger.info("Creating inversions dataset...")
-    inversions_dataset = PermutationAndInverseDataset(inversions_dataset_config)
-
-    logger.info("Creating composition dataset config...")
-    composition_dataset_config = ComposedPermutationDatasetConfig(
-        n_max_permutation_size=config.dataset.n_max_permutation_size,
-        gamma=config.dataset.gamma,
-    )
-
-    logger.info("Creating composition dataset...")
-    composition_dataset = ComposedPermutationDataset(composition_dataset_config)
-
-    # 3. Create Dataloaders
-    num_workers = 0
-    prefetch_factor = None
-    if platform.system() == "Linux":
-        num_workers = config.dataset.num_workers
-        prefetch_factor = config.dataset.prefetch_factor
-
-    inversions_dataloader = iter(
-        DataLoader(
-            inversions_dataset,
-            batch_size=config.dataset.batch_size,
-            num_workers=num_workers,
-            prefetch_factor=prefetch_factor,
-            pin_memory=True,
-        )
-    )
-    composition_dataloader = iter(
-        DataLoader(
-            composition_dataset,
-            batch_size=config.dataset.batch_size,
-            num_workers=num_workers,
-            prefetch_factor=prefetch_factor,
-            pin_memory=True,
-        )
-    )
 
     # 4. Create Models (Encoder/Decoder)
     logger.info("Creating permutation encoder...")
