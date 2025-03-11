@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 @hydra.main(
-    config_path="../conf/permutations_group/grid",  # Adjust path if needed
+    config_path="../../../conf/permutations_group/grid",  # Adjust path if needed
     config_name="default",  # The name of your .yaml file, e.g. "default.yaml"
     version_base=None,
 )

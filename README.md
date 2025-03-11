@@ -43,19 +43,19 @@ Key differences in the H100 configuration:
 To run an experiment with the default CPU configuration:
 
 ```bash
-python -m rl_the_spire.experiments.permutations_group_grid_experiment
+python -m rl_the_spire.experiments.permutations_group.grid_vae.run_experiment
 ```
 
 To run with the H100 GPU configuration:
 
 ```bash
-python -m rl_the_spire.experiments.permutations_group_grid_experiment --config-name default-h100
+python -m rl_the_spire.experiments.permutations_group.grid_vae.run_experiment --config-name default-h100
 ```
 
 You can also override specific configuration parameters:
 
 ```bash
-python -m rl_the_spire.experiments.permutations_group_grid_experiment encoder.device=cuda dataset.batch_size=512
+python -m rl_the_spire.experiments.permutations_group.grid_vae.run_experiment encoder.device=cuda dataset.batch_size=512
 ```
 
 ## Monitoring
@@ -63,7 +63,7 @@ python -m rl_the_spire.experiments.permutations_group_grid_experiment encoder.de
 The experiment logs metrics to WandB (Weights & Biases). To disable WandB logging:
 
 ```bash
-python -m rl_the_spire.experiments.permutations_group_experiment wandb_enabled=false
+python -m rl_the_spire.experiments.permutations_group.grid_vae.run_experiment wandb_enabled=false
 ```
 
 ## Project Structure
