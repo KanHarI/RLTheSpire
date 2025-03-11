@@ -1,5 +1,6 @@
+import copy
 import logging
-from typing import Tuple
+from typing import Optional, Tuple
 
 import torch
 
@@ -33,6 +34,54 @@ from rl_the_spire.models.transformers.conv_transformer_body import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def create_target_models(
+    config: PermutationGroupGridExperimentConfig,
+    device: torch.device,
+    permutation_encoder: PermutationGridEncoder,
+    positional_seq_encoder: PositionalSequenceEncoder,
+) -> Tuple[Optional[PermutationGridEncoder], Optional[PositionalSequenceEncoder]]:
+    """
+    Create target models for EMA updates.
+
+    Args:
+        config: The experiment configuration
+        device: The device to create the models on
+        permutation_encoder: The source permutation encoder to copy
+        positional_seq_encoder: The source positional sequence encoder to copy
+
+    Returns:
+        Tuple containing:
+        - target_encoder: EMA target encoder (None if not using EMA targets)
+        - target_positional_encoder: EMA target positional encoder (None if not using EMA targets)
+    """
+    if not config.use_ema_target:
+        return None, None
+
+    logger.info("Initializing EMA target encoder")
+    target_encoder = copy.deepcopy(permutation_encoder)
+    target_encoder.to(device)
+
+    logger.info("Initializing EMA target positional encoder")
+    target_positional_encoder = copy.deepcopy(positional_seq_encoder)
+    target_positional_encoder.to(device)
+
+    # Initialize parameters to zeros if specified
+    if config.init_ema_target_as_zeros:
+        logger.info("Setting EMA target encoder parameters to zeros")
+        for param in target_encoder.parameters():
+            param.data.zero_()
+
+        logger.info("Setting EMA target positional encoder parameters to zeros")
+        for param in target_positional_encoder.parameters():
+            param.data.zero_()
+
+    # Set to eval mode, we never train this directly
+    target_encoder.eval()
+    target_positional_encoder.eval()
+
+    return target_encoder, target_positional_encoder
 
 
 def create_models(

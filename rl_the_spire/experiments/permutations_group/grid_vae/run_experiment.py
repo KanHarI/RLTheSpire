@@ -1,4 +1,3 @@
-import copy
 import logging
 from typing import Any
 
@@ -17,6 +16,7 @@ from rl_the_spire.experiments.permutations_group.common.create_dataloaders impor
 )
 from rl_the_spire.experiments.permutations_group.grid_vae.create_models import (
     create_models,
+    create_target_models,
 )
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
 from rl_the_spire.models.vaes.kl_loss import kl_loss
@@ -80,30 +80,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     )
 
     # Create target encoder and positional sequence encoder if using EMA
-    target_encoder = None
-    target_positional_encoder = None
-    if config.use_ema_target:
-        logger.info("Initializing EMA target encoder")
-        target_encoder = copy.deepcopy(permutation_encoder)
-        target_encoder.to(get_device(config.encoder.device))
-
-        logger.info("Initializing EMA target positional encoder")
-        target_positional_encoder = copy.deepcopy(positional_seq_encoder)
-        target_positional_encoder.to(get_device(config.encoder.device))
-
-        # Initialize parameters to zeros if specified
-        if config.init_ema_target_as_zeros:
-            logger.info("Setting EMA target encoder parameters to zeros")
-            for param in target_encoder.parameters():
-                param.data.zero_()
-
-            logger.info("Setting EMA target positional encoder parameters to zeros")
-            for param in target_positional_encoder.parameters():
-                param.data.zero_()
-
-        # Set to eval mode, we never train this directly
-        target_encoder.eval()
-        target_positional_encoder.eval()
+    target_encoder, target_positional_encoder = create_target_models(
+        config, device, permutation_encoder, positional_seq_encoder
+    )
 
     # 5. Create an optimizer
     logger.info("Creating AdamW optimizer...")
