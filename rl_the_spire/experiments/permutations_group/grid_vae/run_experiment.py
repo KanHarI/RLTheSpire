@@ -58,7 +58,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     dtype = get_dtype(config.encoder.dtype)
 
     learned_networks_tuple = create_models(config, device, dtype)
-    
+
     (
         permutation_encoder,
         positional_seq_encoder,
@@ -140,14 +140,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         #       EVAL
         # -------------------
         if step % config.eval_interval == 0:
-            permutation_encoder.eval()
-            permutations_decoder.eval()
-            inverter_network.eval()
-            composer_network.eval()
-            positional_grid_encoder.eval()
-            positional_seq_encoder.eval()
-            denoiser_network.eval()
-            live_to_target_adapter.eval()
+            for model in learned_networks_tuple:
+                model.eval()
 
             if (
                 config.use_ema_target
@@ -459,14 +453,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # -------------------
         #      TRAIN
         # -------------------
-        permutation_encoder.train()
-        permutations_decoder.train()
-        inverter_network.train()
-        composer_network.train()
-        positional_grid_encoder.train()
-        positional_seq_encoder.train()
-        denoiser_network.train()
-        live_to_target_adapter.train()
+        for model in learned_networks_tuple:
+            model.train()
 
         perm, inv = next(inversions_dataloader)
         p, q, r = next(composition_dataloader)
