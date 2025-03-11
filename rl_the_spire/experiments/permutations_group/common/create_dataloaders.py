@@ -1,6 +1,6 @@
 import logging
 import platform
-from typing import Tuple
+from typing import Iterator, Tuple
 
 import torch
 from torch.utils.data import DataLoader
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 def create_dataloaders(
     config: PermutationGroupDatasetConfig,
 ) -> Tuple[
-    DataLoader[Tuple[torch.Tensor, torch.Tensor]],
-    DataLoader[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+    Iterator[Tuple[torch.Tensor, torch.Tensor]],
+    Iterator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
 ]:
     """
     Create and return dataloaders (or iterators) for inversions and composition tasks.
@@ -67,4 +67,4 @@ def create_dataloaders(
     )
 
     logger.info("Created dataloaders for inversions and composition datasets.")
-    return inversions_dataloader, composition_dataloader
+    return iter(inversions_dataloader), iter(composition_dataloader)
