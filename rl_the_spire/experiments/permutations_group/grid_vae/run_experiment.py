@@ -18,6 +18,9 @@ from rl_the_spire.experiments.permutations_group.grid_vae.create_models import (
     create_models,
     create_target_models,
 )
+from rl_the_spire.experiments.permutations_group.grid_vae.training_loop_iteration import (
+    training_loop_iteration,
+)
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
 from rl_the_spire.models.vaes.kl_loss import kl_loss
 from rl_the_spire.utils.loss_utils import get_kl_weight, get_latent_weight
@@ -143,15 +146,12 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             for model in learned_networks_tuple:
                 model.eval()
 
-            if (
-                config.use_ema_target
-                and target_encoder is not None
-                and target_positional_encoder is not None
-            ):
-                target_encoder.eval()
-                target_positional_encoder.eval()
-
             with torch.no_grad():
+                training_loop_iteration(
+                    learned_networks_tuple,
+                    (inversions_dataloader, composition_dataloader),
+                    device,
+                )
                 # Sample new data for evaluation
                 eval_perm, eval_inv = next(inversions_dataloader)
                 eval_p, eval_q, eval_r = next(composition_dataloader)
