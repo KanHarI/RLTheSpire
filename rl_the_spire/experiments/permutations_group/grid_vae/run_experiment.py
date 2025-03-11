@@ -10,35 +10,13 @@ import wandb
 from rl_the_spire.conf.permutations_group.grid.permutation_group_grid_experiment_config import (
     PermutationGroupGridExperimentConfig,
 )
-from rl_the_spire.conf.utils.activations import get_activation
 from rl_the_spire.conf.utils.devices import get_device
 from rl_the_spire.conf.utils.dtypes import get_dtype
 from rl_the_spire.experiments.permutations_group.common.create_dataloaders import (
     create_dataloaders,
 )
-from rl_the_spire.models.permutations.permutation_composer import (
-    PermutationComposer,
-    PermutationComposerConfig,
-)
-from rl_the_spire.models.permutations.permutation_grid_decoder import (
-    PermutationGridDecoder,
-    PermutationGridDecoderConfig,
-)
-from rl_the_spire.models.permutations.permutation_grid_encoder import (
-    PermutationGridEncoder,
-    PermutationGridEncoderConfig,
-)
-from rl_the_spire.models.position_encodings.positional_grid_encoder import (
-    PositionalGridEncoder,
-    PositionalGridEncoderConfig,
-)
-from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
-    PositionalSequenceEncoder,
-    PositionalSequenceEncoderConfig,
-)
-from rl_the_spire.models.transformers.conv_transformer_body import (
-    ConvTransformerBody,
-    ConvTransformerBodyConfig,
+from rl_the_spire.experiments.permutations_group.grid_vae.create_models import (
+    create_models,
 )
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
 from rl_the_spire.models.vaes.kl_loss import kl_loss
@@ -72,46 +50,36 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     TOTAL_ENCODED_PERMUTATIONS = 5  # constant used to average out loss components
 
-    # 4. Create Models (Encoder/Decoder)
-    logger.info("Creating permutation encoder...")
-    permutation_encoder_config = PermutationGridEncoderConfig(
-        n_max_permutation_size=config.dataset.n_max_permutation_size,
-        n_embed=config.encoder.n_embed,
-        n_heads=config.encoder.n_heads,
-        n_layers=config.encoder.n_layers,
-        attn_dropout=config.encoder.attn_dropout,
-        resid_dropout=config.encoder.resid_dropout,
-        dtype=get_dtype(config.encoder.dtype),
-        device=get_device(config.encoder.device),
-        init_std=config.encoder.init_std,
-        mlp_dropout=config.encoder.mlp_dropout,
-        ln_eps=config.encoder.ln_eps,
-        n_output_heads=config.encoder.n_output_heads,
-        n_output_embed=config.encoder.n_output_embed,
-        n_output_rows=config.encoder.n_output_rows,
-        n_output_columns=config.encoder.n_output_columns,
-        activation=get_activation(config.encoder.activation),
-        linear_size_multiplier=config.encoder.linear_size_multiplier,
-        conv_transformer_n_heads=config.conv_transformer.n_heads,
-        conv_transformer_blocks=config.encoder.conv_blocks,
-        sigma_output=config.encoder.sigma_output,
-    )
-    permutation_encoder = PermutationGridEncoder(permutation_encoder_config)
-    permutation_encoder.init_weights()
+    # Create all models
+    logger.info("Creating models...")
 
-    # Create the positional sequence encoder
-    logger.info("Creating positional sequence encoder...")
-    positional_seq_encoder_config = PositionalSequenceEncoderConfig(
-        n_embed=config.encoder.n_embed,
-        max_seq_len=config.dataset.n_max_permutation_size,
-        device=get_device(config.encoder.device),
-        dtype=get_dtype(config.encoder.dtype),
-        init_std=config.encoder.init_std,
-    )
-    positional_seq_encoder = PositionalSequenceEncoder(positional_seq_encoder_config)
-    positional_seq_encoder.init_weights()
+    # Explicitly set device and dtype for all models
+    device = get_device(config.encoder.device)
+    dtype = get_dtype(config.encoder.dtype)
 
-    # Create target encoder if using EMA
+    (
+        permutation_encoder,
+        positional_seq_encoder,
+        denoiser_network,
+        permutations_decoder,
+        inverter_network,
+        composer_network,
+        live_to_target_adapter,
+        positional_grid_encoder,
+    ) = create_models(config, device, dtype)
+
+    params_for_optimizer = (
+        list(permutation_encoder.parameters())
+        + list(positional_seq_encoder.parameters())
+        + list(denoiser_network.parameters())
+        + list(permutations_decoder.parameters())
+        + list(inverter_network.parameters())
+        + list(composer_network.parameters())
+        + list(live_to_target_adapter.parameters())
+        + list(positional_grid_encoder.parameters())
+    )
+
+    # Create target encoder and positional sequence encoder if using EMA
     target_encoder = None
     target_positional_encoder = None
     if config.use_ema_target:
@@ -137,128 +105,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         target_encoder.eval()
         target_positional_encoder.eval()
 
-    logger.info("Creating denoiser network...")
-    denoiser_network_config = ConvTransformerBodyConfig(
-        n_blocks=config.conv_transformer.denoiser_blocks,
-        n_embed=config.encoder.n_output_embed,
-        n_heads=config.conv_transformer.n_heads,
-        attn_dropout=config.encoder.attn_dropout,
-        resid_dropout=config.encoder.resid_dropout,
-        init_std=config.encoder.init_std,
-        mlp_dropout=config.encoder.mlp_dropout,
-        linear_size_multiplier=config.encoder.linear_size_multiplier,
-        activation=get_activation(config.encoder.activation),
-        dtype=get_dtype(config.encoder.dtype),
-        device=get_device(config.encoder.device),
-    )
-    denoiser_network = ConvTransformerBody(denoiser_network_config)
-    denoiser_network.init_weights()
-
-    logger.info("Creating permutations decoder...")
-    permutations_decoder_config = PermutationGridDecoderConfig(
-        n_embed_grid=config.encoder.n_output_embed,
-        n_embed_sequence=config.encoder.n_embed,
-        n_grid_rows=config.encoder.n_output_rows,
-        n_grid_columns=config.encoder.n_output_columns,
-        n_max_permutation_size=config.dataset.n_max_permutation_size,
-        n_sequence_layers=config.encoder.n_layers,
-        conv_transformer_n_heads=config.conv_transformer.n_heads,
-        sequence_n_heads=config.encoder.n_heads,
-        linear_size_multiplier=config.encoder.linear_size_multiplier,
-        activation=get_activation(config.encoder.activation),
-        dtype=get_dtype(config.encoder.dtype),
-        device=get_device(config.encoder.device),
-        init_std=config.encoder.init_std,
-        ln_eps=config.encoder.ln_eps,
-        attn_dropout=config.encoder.attn_dropout,
-        resid_dropout=config.encoder.resid_dropout,
-        mlp_dropout=config.encoder.mlp_dropout,
-    )
-    permutations_decoder = PermutationGridDecoder(permutations_decoder_config)
-    permutations_decoder.init_weights()
-
-    logger.info("Creating inverter network...")
-    inverter_network_config = ConvTransformerBodyConfig(
-        n_blocks=config.inverter_network.n_layers,
-        n_embed=config.encoder.n_output_embed,
-        n_heads=config.conv_transformer.n_heads,
-        attn_dropout=config.encoder.attn_dropout,
-        resid_dropout=config.encoder.resid_dropout,
-        mlp_dropout=config.encoder.mlp_dropout,
-        linear_size_multiplier=config.encoder.linear_size_multiplier,
-        activation=get_activation(config.encoder.activation),
-        dtype=get_dtype(config.encoder.dtype),
-        device=get_device(config.encoder.device),
-        init_std=config.encoder.init_std,
-        ln_eps=config.encoder.ln_eps,
-    )
-    inverter_network = ConvTransformerBody(inverter_network_config)
-    inverter_network.init_weights()
-
-    logger.info("Creating composer network...")
-    composer_network_config = PermutationComposerConfig(
-        n_embed=config.encoder.n_output_embed,
-        n_heads=config.conv_transformer.n_heads,
-        attn_dropout=config.encoder.attn_dropout,
-        resid_dropout=config.encoder.resid_dropout,
-        mlp_dropout=config.encoder.mlp_dropout,
-        linear_size_multiplier=config.encoder.linear_size_multiplier,
-        activation=get_activation(config.encoder.activation),
-        dtype=get_dtype(config.encoder.dtype),
-        device=get_device(config.encoder.device),
-        init_std=config.encoder.init_std,
-        n_layers=config.composer_network.n_layers,
-        ln_eps=config.encoder.ln_eps,
-    )
-    composer_network = PermutationComposer(composer_network_config)
-    composer_network.init_weights()
-
-    logger.info("Creating live to target adapter...")
-    live_to_target_adapter_config = ConvTransformerBodyConfig(
-        n_blocks=config.num_live_to_target_adapter_layers,
-        n_embed=config.encoder.n_output_embed,
-        n_heads=config.conv_transformer.n_heads,
-        attn_dropout=config.encoder.attn_dropout,
-        resid_dropout=config.encoder.resid_dropout,
-        mlp_dropout=config.encoder.mlp_dropout,
-        linear_size_multiplier=config.encoder.linear_size_multiplier,
-        activation=get_activation(config.encoder.activation),
-        dtype=get_dtype(config.encoder.dtype),
-        device=get_device(config.encoder.device),
-        init_std=config.encoder.init_std,
-        ln_eps=config.encoder.ln_eps,
-    )
-    live_to_target_adapter = ConvTransformerBody(live_to_target_adapter_config)
-    live_to_target_adapter.init_weights()
-
-    logger.info("Creating positional grid encoder...")
-    positional_grid_encoder_config = PositionalGridEncoderConfig(
-        n_embed=config.encoder.n_output_embed,
-        n_rows=config.encoder.n_output_rows,
-        n_cols=config.encoder.n_output_columns,
-        device=get_device(config.encoder.device),
-        dtype=get_dtype(config.encoder.dtype),
-    )
-    positional_grid_encoder = PositionalGridEncoder(positional_grid_encoder_config)
-    positional_grid_encoder.init_weights()
-    # Explicitly ensure all model parameters are using the specified dtype and device
-    device = get_device(config.encoder.device)
-    dtype = get_dtype(config.encoder.dtype)
-
     # 5. Create an optimizer
     logger.info("Creating AdamW optimizer...")
-    params = (
-        list(permutation_encoder.parameters())
-        + list(permutations_decoder.parameters())
-        + list(inverter_network.parameters())
-        + list(denoiser_network.parameters())
-        + list(composer_network.parameters())
-        + list(live_to_target_adapter.parameters())
-        + list(positional_grid_encoder.parameters())
-        + list(positional_seq_encoder.parameters())
-    )
     optimizer = torch.optim.AdamW(
-        params,
+        params_for_optimizer,
         lr=config.optimizer.lr,
         betas=(config.optimizer.beta1, config.optimizer.beta2),
         weight_decay=config.optimizer.weight_decay,
