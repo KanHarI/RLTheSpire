@@ -83,17 +83,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     if target_positional_encoder is None:
         target_positional_encoder = positional_seq_encoder
 
-    # params_for_optimizer = (
-    #     list(permutation_encoder.parameters())
-    #     + list(positional_seq_encoder.parameters())
-    #     + list(denoiser_network.parameters())
-    #     + list(permutations_decoder.parameters())
-    #     + list(inverter_network.parameters())
-    #     + list(composer_network.parameters())
-    #     + list(live_to_target_adapter.parameters())
-    #     + list(positional_grid_encoder.parameters())
-    # )
-
     params_for_optimizer = [
         param for model in learned_networks_tuple for param in model.parameters()
     ]
@@ -152,7 +141,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 model.eval()
 
             with torch.no_grad():
-                training_loop_iteration(
+                losses = training_loop_iteration(
                     TrainingLoopInput(
                         learned_networks_tuple=learned_networks_tuple,
                         target_networks_tuple=(
@@ -165,6 +154,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         dtype=dtype,
                     )
                 )
+                kl_weight = get_kl_weight(
+                    step,
+                    config.vae.kl_warmup_steps,
+                    config.vae.kl_warmup_start_weight,
+                    config.vae.kl_loss_weight,
+                )
+                kl_weighted_loss = losses.kl_losses * kl_weight
+
                 # Sample new data for evaluation
                 eval_perm, eval_inv = next(inversions_dataloader)
                 eval_p, eval_q, eval_r = next(composition_dataloader)

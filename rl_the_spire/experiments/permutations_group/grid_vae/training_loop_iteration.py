@@ -50,6 +50,11 @@ class TrainingLoopInput:
 class TrainingLoopIterationOutput:
     kl_losses: torch.Tensor
     live_to_target_l2: torch.Tensor
+    vae_reconstruction_nll: torch.Tensor
+    target_inv_l2: torch.Tensor
+    target_comp_l2: torch.Tensor
+    inv_reconstruction_nll: torch.Tensor
+    comp_reconstruction_nll: torch.Tensor
 
 
 TOTAL_ENCODED_PERMUTATIONS = 5
@@ -99,7 +104,9 @@ def training_loop_iteration(
         [ep_perm_mus, ep_inv_mus, ep_p_mus, ep_q_mus, ep_r_mus],
         [ep_perm_logvars, ep_inv_logvars, ep_p_logvars, ep_q_logvars, ep_r_logvars],
     ):
-        kl_losses += kl_loss(mus, logvars).mean(dim=0).sum()
+        kl_losses += (
+            kl_loss(mus, logvars).mean(dim=0).sum() / TOTAL_ENCODED_PERMUTATIONS
+        )
 
     # Encode all permutations using the target encoder
     with torch.no_grad():
@@ -151,7 +158,64 @@ def training_loop_iteration(
             / TOTAL_ENCODED_PERMUTATIONS
         )
 
+    # Decode from latent space (VAE)
+    dec_perm = permutations_decoder(positional_seq_encoder, sampled_perm)
+    dec_inv = permutations_decoder(positional_seq_encoder, sampled_inv)
+    dec_p = permutations_decoder(positional_seq_encoder, sampled_p)
+    dec_q = permutations_decoder(positional_seq_encoder, sampled_q)
+    dec_r = permutations_decoder(positional_seq_encoder, sampled_r)
+
+    # Reconstruction loss
+    vae_reconstruction_nll = torch.tensor(
+        0.0, device=tl_input.device, dtype=tl_input.dtype
+    )
+    for dec, orig in zip(
+        [dec_perm, dec_inv, dec_p, dec_q, dec_r],
+        [perm, inv, p, q, r],
+    ):
+        vae_reconstruction_nll += (
+            permutation_encoder.embedder.nll_loss(dec, orig).mean()
+            / TOTAL_ENCODED_PERMUTATIONS
+        )
+
+    # Neural group operations
+    neural_inv_perm = inverter_network(sampled_perm)
+    neural_comp_perm = composer_network(sampled_p, sampled_q)
+
+    # Decode after neural group operations
+    dec_neural_inv_perm = permutations_decoder(positional_seq_encoder, neural_inv_perm)
+    dec_neural_comp_perm = permutations_decoder(
+        positional_seq_encoder, neural_comp_perm
+    )
+
+    # Construct l2 loss to target network inv, r
+    target_inv_l2 = torch.norm(
+        live_to_target_adapter(positional_grid_encoder(dec_neural_inv_perm))
+        - te_inv_mus,
+        p=2,
+        dim=1,
+    ).mean()
+    target_comp_l2 = torch.norm(
+        live_to_target_adapter(positional_grid_encoder(dec_neural_comp_perm))
+        - te_r_mus,
+        p=2,
+        dim=1,
+    ).mean()
+
+    # Reconstruction loss after neural group operations
+    inv_reconstruction_nll = permutation_encoder.embedder.nll_loss(
+        dec_neural_inv_perm, inv
+    ).mean()
+    comp_reconstruction_nll = permutation_encoder.embedder.nll_loss(
+        dec_neural_comp_perm, r
+    ).mean()
+
     return TrainingLoopIterationOutput(
         kl_losses=kl_losses,
         live_to_target_l2=live_to_target_l2,
+        vae_reconstruction_nll=vae_reconstruction_nll,
+        target_inv_l2=target_inv_l2,
+        target_comp_l2=target_comp_l2,
+        inv_reconstruction_nll=inv_reconstruction_nll,
+        comp_reconstruction_nll=comp_reconstruction_nll,
     )
