@@ -1,10 +1,12 @@
+import math
+
 import torch
 
 
 def lr_lambda(current_step: int, warmup_steps: int) -> float:
     """
     Calculate learning rate multiplier for a learning rate scheduler.
-    Implements linear warmup followed by constant learning rate.
+    Implements cosine annealing warmup followed by constant learning rate.
 
     Args:
         current_step: Current training step
@@ -13,9 +15,9 @@ def lr_lambda(current_step: int, warmup_steps: int) -> float:
     Returns:
         Learning rate multiplier
     """
-    # Linear warmup followed by constant learning rate
+    # Cosine annealing warmup followed by constant learning rate
     if current_step < warmup_steps:
-        return float(current_step) / float(max(1, warmup_steps))
+        return 0.5 * (1 + math.cos(math.pi * (1 - current_step / warmup_steps)))
     return 1.0
 
 
@@ -24,7 +26,7 @@ def get_ema_tau(
 ) -> float:
     """
     Calculate the Exponential Moving Average (EMA) tau parameter with warmup.
-    Implements harmonic decrease of EMA tau from start_value to final_value.
+    Implements cosine annealing of EMA tau in harmonic space.
 
     Args:
         current_step: Current training step
@@ -35,14 +37,20 @@ def get_ema_tau(
     Returns:
         Current tau value
     """
-    # Harmonic decrease of EMA tau from start_value to final_value
+    # Cosine annealing of EMA tau in harmonic space
     if current_step < warmup_steps:
-        # Using harmonic interpolation: 1/(alpha/a + (1-alpha)/b)
-        alpha = float(current_step) / float(max(1, warmup_steps))
+        # Convert to reciprocal space
         start_inv = 1.0 / tau_start
         final_inv = 1.0 / tau_final
-        # Interpolate in the reciprocal space
-        tau_inv = alpha * final_inv + (1.0 - alpha) * start_inv
+
+        # Cosine annealing factor (0->1)
+        cosine_factor = 0.5 * (
+            1 - math.cos(math.pi * current_step / max(1, warmup_steps))
+        )
+
+        # Interpolate in the reciprocal space with cosine schedule
+        tau_inv = start_inv + cosine_factor * (final_inv - start_inv)
+
         # Convert back to the original space
         return 1.0 / tau_inv
     return tau_final
@@ -53,6 +61,7 @@ def ema_update(
 ) -> None:
     """
     Update the target model parameters with the source model parameters using EMA.
+    The tau parameter is expected to be calculated using cosine annealing in harmonic space.
 
     Args:
         target_model: The target model to be updated
