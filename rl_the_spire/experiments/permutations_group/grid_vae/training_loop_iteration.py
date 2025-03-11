@@ -18,7 +18,7 @@ from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
 )
 from rl_the_spire.models.transformers.conv_transformer_body import ConvTransformerBody
 from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
-from rl_the_spire.models.vaes.kl_loss import kl_loss
+from rl_the_spire.models.vaes.kl_loss import vectorized_kl_loss
 
 
 @dataclasses.dataclass
@@ -100,13 +100,14 @@ def training_loop_iteration(
 
     # Calculate encoder KL losses
     kl_losses = torch.tensor(0.0, device=tl_input.device, dtype=tl_input.dtype)
-    for mus, logvars in zip(
-        [ep_perm_mus, ep_inv_mus, ep_p_mus, ep_q_mus, ep_r_mus],
-        [ep_perm_logvars, ep_inv_logvars, ep_p_logvars, ep_q_logvars, ep_r_logvars],
-    ):
-        kl_losses += (
-            kl_loss(mus, logvars).mean(dim=0).sum() / TOTAL_ENCODED_PERMUTATIONS
-        )
+
+    all_mus = torch.stack([ep_perm_mus, ep_inv_mus, ep_p_mus, ep_q_mus, ep_r_mus])
+    all_logvars = torch.stack(
+        [ep_perm_logvars, ep_inv_logvars, ep_p_logvars, ep_q_logvars, ep_r_logvars]
+    )
+
+    # Replace the for-loop with vectorized operation
+    kl_losses = vectorized_kl_loss(all_mus, all_logvars).mean()
 
     # Encode all permutations using the target encoder
     with torch.no_grad():
@@ -145,18 +146,18 @@ def training_loop_iteration(
 
     # Calculate live to target L2 losses
     live_to_target_l2 = torch.tensor(0.0, device=tl_input.device, dtype=tl_input.dtype)
-    for sampled, target_mus in zip(
-        [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r],
-        [te_perm_mus, te_inv_mus, ep_p_logvars, ep_q_logvars, ep_r_logvars],
-    ):
-        live_to_target_l2 += (
-            torch.norm(
-                live_to_target_adapter(positional_grid_encoder(sampled)) - target_mus,
-                p=2,
-                dim=1,
-            ).mean()
-            / TOTAL_ENCODED_PERMUTATIONS
-        )
+
+    all_samples = torch.stack(
+        [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r]
+    )
+    all_target_mus = torch.stack(
+        [te_perm_mus, te_inv_mus, te_p_mus, te_q_mus, te_r_mus]
+    )
+    live_to_target_l2 = torch.norm(
+        live_to_target_adapter(positional_grid_encoder(all_samples)) - all_target_mus,
+        p=2,
+        dim=2,
+    ).mean()
 
     # Decode from latent space (VAE)
     dec_perm = permutations_decoder(positional_seq_encoder, sampled_perm)
