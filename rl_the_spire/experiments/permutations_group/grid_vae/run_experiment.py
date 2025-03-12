@@ -141,329 +141,88 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 model.eval()
 
             with torch.no_grad():
-                # losses = training_loop_iteration(
-                #     TrainingLoopInput(
-                #         learned_networks_tuple=learned_networks_tuple,
-                #         target_networks_tuple=(
-                #             target_encoder,
-                #             target_positional_encoder,
-                #         ),
-                #         dataloaders=(inversions_dataloader, composition_dataloader),
-                #         vae_gamma=config.vae.gamma,
-                #         device=device,
-                #         dtype=dtype,
-                #     )
-                # )
-                # kl_weight = get_kl_weight(
-                #     step,
-                #     config.vae.kl_warmup_steps,
-                #     config.vae.kl_warmup_start_weight,
-                #     config.vae.kl_loss_weight,
-                # )
-                # kl_weighted_loss = losses.kl_losses * kl_weight
-                # latent_l2_losses_weight = get_latent_weight(
-                #     step,
-                #     config.latent_warmup_delay_steps,
-                #     config.latent_warmup_steps,
-                #     config.latent_warmup_start_weight,
-                # )
-
-                # Sample new data for evaluation
-                eval_perm, eval_inv = next(inversions_dataloader)
-                eval_p, eval_q, eval_r = next(composition_dataloader)
-
-                # Convert input tensors to the right device - keep as long for inputs
-                eval_perm = eval_perm.to(device)
-                eval_inv = eval_inv.to(device)
-                eval_p = eval_p.to(device)
-                eval_q = eval_q.to(device)
-                eval_r = eval_r.to(device)
-
-                # Forward pass - always use the main encoder
-                ep_perm_mus, ep_perm_logvars = permutation_encoder(
-                    positional_seq_encoder, eval_perm
-                )
-                ep_inv_mus, ep_inv_logvars = permutation_encoder(
-                    positional_seq_encoder, eval_inv
-                )
-                ep_p_mus, ep_p_logvars = permutation_encoder(
-                    positional_seq_encoder, eval_p
-                )
-                ep_q_mus, ep_q_logvars = permutation_encoder(
-                    positional_seq_encoder, eval_q
-                )
-                ep_r_mus, ep_r_logvars = permutation_encoder(
-                    positional_seq_encoder, eval_r
-                )
-
-                kl_losses_eval = torch.tensor(0.0, device=device, dtype=dtype)
-                for mus, logvars in zip(
-                    [ep_perm_mus, ep_inv_mus, ep_p_mus, ep_q_mus, ep_r_mus],
-                    [
-                        ep_perm_logvars,
-                        ep_inv_logvars,
-                        ep_p_logvars,
-                        ep_q_logvars,
-                        ep_r_logvars,
-                    ],
-                ):
-                    kl_losses_eval += (
-                        kl_loss(mus, logvars).mean(dim=0).sum()
-                        / TOTAL_ENCODED_PERMUTATIONS
+                losses = training_loop_iteration(
+                    TrainingLoopInput(
+                        learned_networks_tuple=learned_networks_tuple,
+                        target_networks_tuple=(
+                            target_encoder,
+                            target_positional_encoder,
+                        ),
+                        dataloaders=(inversions_dataloader, composition_dataloader),
+                        vae_gamma=config.vae.gamma,
+                        device=device,
+                        dtype=dtype,
                     )
-
-                kl_losses_eval_weighted = kl_losses_eval * get_kl_weight(
+                )
+                kl_weight = get_kl_weight(
                     step,
                     config.vae.kl_warmup_steps,
                     config.vae.kl_warmup_start_weight,
                     config.vae.kl_loss_weight,
                 )
+                kl_weighted_loss = losses.kl_losses * kl_weight
+                vae_reconstruction_nll_weighted = losses.vae_reconstruction_nll * config.reconstruction_loss_weight
+                inv_reconstruction_nll_weighted = losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
+                comp_reconstruction_nll_weighted = losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
+                latent_l2_losses_weight = get_latent_weight(
+                    step,
+                    config.latent_warmup_delay_steps,
+                    config.latent_warmup_steps,
+                    config.latent_warmup_start_weight,
+                )
+                live_to_target_l2_weightes = losses.live_to_target_l2 * config.latent_sampled_perm_loss_weight * latent_l2_losses_weight
+                inv_latent_l2_weight = losses.target_inv_l2 * config.latent_inv_perm_loss_weight * latent_l2_losses_weight
+                comp_latent_l2_weight = losses.target_comp_l2 * config.latent_comp_perm_loss_weight * latent_l2_losses_weight
+                total_loss = kl_weighted_loss + vae_reconstruction_nll_weighted + inv_reconstruction_nll_weighted + comp_reconstruction_nll_weighted + live_to_target_l2_weightes + inv_latent_l2_weight + comp_latent_l2_weight
 
-                # Sample & decode
-                sampled_perm = denoiser_network(
-                    positional_grid_encoder(
-                        gamma_vae_sample(ep_perm_mus, ep_perm_logvars, config.vae.gamma)
-                    )
-                )
-                sampled_inv = denoiser_network(
-                    positional_grid_encoder(
-                        gamma_vae_sample(ep_inv_mus, ep_inv_logvars, config.vae.gamma)
-                    )
-                )
-                sampled_p = denoiser_network(
-                    positional_grid_encoder(
-                        gamma_vae_sample(ep_p_mus, ep_p_logvars, config.vae.gamma)
-                    )
-                )
-                sampled_q = denoiser_network(
-                    positional_grid_encoder(
-                        gamma_vae_sample(ep_q_mus, ep_q_logvars, config.vae.gamma)
-                    )
-                )
-                sampled_r = denoiser_network(
-                    positional_grid_encoder(
-                        gamma_vae_sample(ep_r_mus, ep_r_logvars, config.vae.gamma)
-                    )
-                )
-
-                # Inverter
-                neural_inv_perm = inverter_network(sampled_perm)
-                neural_comp_perm = composer_network(sampled_p, sampled_q)
-
-                dec_perm = permutations_decoder(positional_seq_encoder, sampled_perm)
-                dec_inv = permutations_decoder(positional_seq_encoder, sampled_inv)
-                dec_p = permutations_decoder(positional_seq_encoder, sampled_p)
-                dec_q = permutations_decoder(positional_seq_encoder, sampled_q)
-                dec_r = permutations_decoder(positional_seq_encoder, sampled_r)
-
-                dec_neural_inv_perm = permutations_decoder(
-                    positional_seq_encoder, neural_inv_perm
-                )
-                dec_neural_comp_perm = permutations_decoder(
-                    positional_seq_encoder, neural_comp_perm
-                )
-
-                reconstruction_losses_eval = torch.tensor(
-                    0.0, device=device, dtype=dtype
-                )
-                for dec, orig in zip(
-                    [dec_perm, dec_inv, dec_p, dec_q, dec_r],
-                    [eval_perm, eval_inv, eval_p, eval_q, eval_r],
-                ):
-                    reconstruction_losses_eval += (
-                        permutation_encoder.embedder.nll_loss(dec, orig)
-                        .mean(dim=0)
-                        .sum()
-                        / TOTAL_ENCODED_PERMUTATIONS
-                    )
-                reconstruction_losses_eval_weighted = (
-                    reconstruction_losses_eval * config.reconstruction_loss_weight
-                )
-
-                neural_inv_perm_loss = (
-                    permutation_encoder.embedder.nll_loss(dec_neural_inv_perm, eval_inv)
-                    .mean(dim=0)
-                    .sum()
-                )
-                neural_inv_perm_loss_weighted = (
-                    neural_inv_perm_loss * config.neural_inv_perm_loss_weight
-                )
-
-                neural_comp_perm_loss = (
-                    permutation_encoder.embedder.nll_loss(dec_neural_comp_perm, eval_r)
-                    .mean(dim=0)
-                    .sum()
-                )
-                neural_comp_perm_loss_weighted = (
-                    neural_comp_perm_loss * config.neural_comp_perm_loss_weight
-                )
-
-                # Add L2 losses in the latent space
-                # Use the target encoder for target values if available
-                if (
-                    config.use_ema_target
-                    and target_encoder is not None
-                    and target_positional_encoder is not None
-                ):
-                    with torch.no_grad():
-                        target_inv_mus, _ = target_encoder(
-                            target_positional_encoder, eval_inv
-                        )
-                        target_r_mus, _ = target_encoder(
-                            target_positional_encoder, eval_r
-                        )
-                        # Get target encodings for all 5 permutations for the new loss
-                        target_perm_mus, _ = target_encoder(
-                            target_positional_encoder, eval_perm
-                        )
-                        target_p_mus, _ = target_encoder(
-                            target_positional_encoder, eval_p
-                        )
-                        target_q_mus, _ = target_encoder(
-                            target_positional_encoder, eval_q
-                        )
-                else:
-                    with torch.no_grad():
-                        target_inv_mus, _ = permutation_encoder(
-                            positional_seq_encoder, eval_inv
-                        )
-                        target_r_mus, _ = permutation_encoder(
-                            positional_seq_encoder, eval_r
-                        )
-                        # Get target encodings for all 5 permutations for the new loss
-                        target_perm_mus, _ = permutation_encoder(
-                            positional_seq_encoder, eval_perm
-                        )
-                        target_p_mus, _ = permutation_encoder(
-                            positional_seq_encoder, eval_p
-                        )
-                        target_q_mus, _ = permutation_encoder(
-                            positional_seq_encoder, eval_q
-                        )
-
-                latent_inv_perm_loss = torch.norm(
-                    live_to_target_adapter(positional_grid_encoder(neural_inv_perm))
-                    - target_inv_mus,
-                    p=2,
-                    dim=1,
-                ).mean()
-                latent_inv_perm_loss_weighted = (
-                    latent_inv_perm_loss
-                    * config.latent_inv_perm_loss_weight
-                    * get_latent_weight(
-                        step,
-                        config.latent_warmup_delay_steps,
-                        config.latent_warmup_steps,
-                        config.latent_warmup_start_weight,
-                    )
-                )
-
-                latent_comp_perm_loss = torch.norm(
-                    live_to_target_adapter(positional_grid_encoder(neural_comp_perm))
-                    - target_r_mus,
-                    p=2,
-                    dim=1,
-                ).mean()
-                latent_comp_perm_loss_weighted = (
-                    latent_comp_perm_loss
-                    * config.latent_comp_perm_loss_weight
-                    * get_latent_weight(
-                        step,
-                        config.latent_warmup_delay_steps,
-                        config.latent_warmup_steps,
-                        config.latent_warmup_start_weight,
-                    )
-                )
-
-                # Add the new loss for the 5 sampled permutations
-                latent_sampled_perm_losses = torch.tensor(
-                    0.0, device=device, dtype=dtype
-                )
-                for sampled, target_mus in zip(
-                    [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r],
-                    [
-                        target_perm_mus,
-                        target_inv_mus,
-                        target_p_mus,
-                        target_q_mus,
-                        target_r_mus,
-                    ],
-                ):
-                    latent_sampled_perm_losses += (
-                        torch.norm(
-                            live_to_target_adapter(positional_grid_encoder(sampled))
-                            - target_mus,
-                            p=2,
-                            dim=1,
-                        ).mean()
-                        / TOTAL_ENCODED_PERMUTATIONS
-                    )  # Average over the permutations using the constant
-
-                latent_sampled_perm_losses_weighted = (
-                    latent_sampled_perm_losses
-                    * config.latent_sampled_perm_loss_weight
-                    * get_latent_weight(
-                        step,
-                        config.latent_warmup_delay_steps,
-                        config.latent_warmup_steps,
-                        config.latent_warmup_start_weight,
-                    )
-                )
-
-                total_loss_eval = (
-                    kl_losses_eval_weighted
-                    + reconstruction_losses_eval_weighted
-                    + neural_inv_perm_loss_weighted
-                    + neural_comp_perm_loss_weighted
-                    + latent_inv_perm_loss_weighted
-                    + latent_comp_perm_loss_weighted
-                    + latent_sampled_perm_losses_weighted
-                )
-
-            # Log eval losses
-            if config.wandb_enabled:
-                wandb.log(
-                    {
-                        "eval/total_loss": total_loss_eval.item(),
-                        "eval/kl_loss": kl_losses_eval.item(),  # raw KL
-                        "eval/kl_loss_weighted": kl_losses_eval_weighted.item(),
+                if config.wandb_enabled:
+                    wandb.log({
+                        "eval/total_loss": total_loss.item(),
+                        "eval/kl_loss": kl_losses.item(),
+                        "eval/kl_loss_weighted": kl_losses_weighted.item(),
                         "eval/kl_weight": get_kl_weight(
                             step,
                             config.vae.kl_warmup_steps,
                             config.vae.kl_warmup_start_weight,
                             config.vae.kl_loss_weight,
                         ),
+                        "eval/vae_reconstruction_nll": losses.vae_reconstruction_nll.item(),
+                        "eval/vae_reconstruction_nll_weighted": vae_reconstruction_nll_weighted.item(),
+                        "eval/inv_reconstruction_nll": losses.inv_reconstruction_nll.item(),
+                        "eval/inv_reconstruction_nll_weighted": inv_reconstruction_nll_weighted.item(),
+                        "eval/comp_reconstruction_nll": losses.comp_reconstruction_nll.item(),
+                        "eval/comp_reconstruction_nll_weighted": comp_reconstruction_nll_weighted.item(),
+                        "eval/live_to_target_l2": losses.live_to_target_l2.item(),
+                        "eval/live_to_target_l2_weighted": live_to_target_l2_weightes.item(),
+                        "eval/inv_latent_l2": losses.target_inv_l2.item(),
+                        "eval/inv_latent_l2_weighted": inv_latent_l2_weight.item(),
+                        "eval/comp_latent_l2": losses.target_comp_l2.item(),
+                        "eval/comp_latent_l2_weighted": comp_latent_l2_weight.item(),
                         "eval/latent_weight": get_latent_weight(
                             step,
                             config.latent_warmup_delay_steps,
                             config.latent_warmup_steps,
                             config.latent_warmup_start_weight,
                         ),
-                        "eval/reconstruction_loss": reconstruction_losses_eval.item(),
-                        "eval/reconstruction_loss_weighted": reconstruction_losses_eval_weighted.item(),
-                        "eval/neural_inv_perm_loss": neural_inv_perm_loss.item(),
-                        "eval/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
-                        "eval/neural_comp_perm_loss": neural_comp_perm_loss.item(),
-                        "eval/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
-                        "eval/latent_inv_perm_loss": latent_inv_perm_loss.item(),
-                        "eval/latent_inv_perm_loss_weighted": latent_inv_perm_loss_weighted.item(),
-                        "eval/latent_comp_perm_loss": latent_comp_perm_loss.item(),
-                        "eval/latent_comp_perm_loss_weighted": latent_comp_perm_loss_weighted.item(),
-                        "eval/latent_sampled_perm_losses": latent_sampled_perm_losses.item(),
-                        "eval/latent_sampled_perm_losses_weighted": latent_sampled_perm_losses_weighted.item(),
+                        "eval/ema_tau": get_ema_tau(
+                            step,
+                            config.ema_tau_warmup_steps,
+                            config.ema_tau_start,
+                            config.ema_tau_final,
+                        ),
                     },
                     step=step,
                 )
-
+            
             logger.info(
-                f"[Eval step {step}] total={total_loss_eval:.4f}, "
-                f"kl={kl_losses_eval:.4f}, "
-                f"recon={reconstruction_losses_eval:.4f}, "
-                f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
-                f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
-                f"latent_inv_perm_loss={latent_inv_perm_loss:.4f}, "
-                f"latent_comp_perm_loss={latent_comp_perm_loss:.4f}, "
-                f"latent_sampled_perm_losses={latent_sampled_perm_losses:.4f}, "
+                f"[Eval step {step}] total={total_loss:.4f}, "
+                f"kl={losses.kl_losses.item():.4f}, "
+                f"vae_recon={losses.vae_reconstruction_nll.item():.4f}, "
+                f"inv_recon={losses.inv_reconstruction_nll.item():.4f}, "
+                f"comp_recon={losses.comp_reconstruction_nll.item():.4f}, "
+                f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
+                f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
+                f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
             )
 
         # -------------------
@@ -471,292 +230,42 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # -------------------
         for model in learned_networks_tuple:
             model.train()
-
-        perm, inv = next(inversions_dataloader)
-        p, q, r = next(composition_dataloader)
-
-        # Convert input tensors to the right device - keep as long for inputs
-        perm = perm.to(device)
-        inv = inv.to(device)
-        p = p.to(device)
-        q = q.to(device)
-        r = r.to(device)
-
-        # Forward pass
-        encoded_perm_mus, encoded_perm_logvars = permutation_encoder(
-            positional_seq_encoder, perm
-        )
-        encoded_inv_mus, encoded_inv_logvars = permutation_encoder(
-            positional_seq_encoder, inv
-        )
-        encoded_p_mus, encoded_p_logvars = permutation_encoder(
-            positional_seq_encoder, p
-        )
-        encoded_q_mus, encoded_q_logvars = permutation_encoder(
-            positional_seq_encoder, q
-        )
-        encoded_r_mus, encoded_r_logvars = permutation_encoder(
-            positional_seq_encoder, r
-        )
-
-        # KL loss (averaged over the 5 permutations)
-        kl_losses = torch.tensor(0.0, device=device, dtype=dtype)
-        for mus, logvars in zip(
-            [
-                encoded_perm_mus,
-                encoded_inv_mus,
-                encoded_p_mus,
-                encoded_q_mus,
-                encoded_r_mus,
-            ],
-            [
-                encoded_perm_logvars,
-                encoded_inv_logvars,
-                encoded_p_logvars,
-                encoded_q_logvars,
-                encoded_r_logvars,
-            ],
-        ):
-            kl_losses += (
-                kl_loss(mus, logvars).mean(dim=0).sum() / TOTAL_ENCODED_PERMUTATIONS
+        
+        losses = training_loop_iteration(
+            TrainingLoopInput(
+                learned_networks_tuple=learned_networks_tuple,
+                target_networks_tuple=(target_encoder, target_positional_encoder),
+                dataloaders=(inversions_dataloader, composition_dataloader),
+                vae_gamma=config.vae.gamma,
+                device=device,
+                dtype=dtype,
             )
-
-        # Weight it by config.vae.kl_loss_weight
-        kl_losses_weighted = kl_losses * get_kl_weight(
+        )
+        kl_weight = get_kl_weight(
             step,
             config.vae.kl_warmup_steps,
             config.vae.kl_warmup_start_weight,
             config.vae.kl_loss_weight,
         )
-
-        # Sample from the latent distribution
-        sampled_perm = denoiser_network(
-            positional_grid_encoder(
-                gamma_vae_sample(
-                    encoded_perm_mus, encoded_perm_logvars, config.vae.gamma
-                )
-            )
+        kl_weighted_loss = losses.kl_losses * kl_weight
+        vae_reconstruction_nll_weighted = losses.vae_reconstruction_nll * config.reconstruction_loss_weight
+        inv_reconstruction_nll_weighted = losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
+        comp_reconstruction_nll_weighted = losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
+        latent_l2_losses_weight = get_latent_weight(
+            step,
+            config.latent_warmup_delay_steps,
+            config.latent_warmup_steps,
+            config.latent_warmup_start_weight,
         )
-        sampled_inv = denoiser_network(
-            positional_grid_encoder(
-                gamma_vae_sample(encoded_inv_mus, encoded_inv_logvars, config.vae.gamma)
-            )
-        )
-        sampled_p = denoiser_network(
-            positional_grid_encoder(
-                gamma_vae_sample(encoded_p_mus, encoded_p_logvars, config.vae.gamma)
-            )
-        )
-        sampled_q = denoiser_network(
-            positional_grid_encoder(
-                gamma_vae_sample(encoded_q_mus, encoded_q_logvars, config.vae.gamma)
-            )
-        )
-        sampled_r = denoiser_network(
-            positional_grid_encoder(
-                gamma_vae_sample(encoded_r_mus, encoded_r_logvars, config.vae.gamma)
-            )
-        )
+        live_to_target_l2_weightes = losses.live_to_target_l2 * config.latent_sampled_perm_loss_weight * latent_l2_losses_weight
+        inv_latent_l2_weight = losses.target_inv_l2 * config.latent_inv_perm_loss_weight * latent_l2_losses_weight
+        comp_latent_l2_weight = losses.target_comp_l2 * config.latent_comp_perm_loss_weight * latent_l2_losses_weight
+        total_loss = kl_weighted_loss + vae_reconstruction_nll_weighted + inv_reconstruction_nll_weighted + comp_reconstruction_nll_weighted + live_to_target_l2_weightes + inv_latent_l2_weight + comp_latent_l2_weight
 
-        # Inverter
-        neural_inv_perm = inverter_network(sampled_perm)
-        neural_comp_perm = composer_network(sampled_p, sampled_q)
-        # Decode
-        decoded_perm = permutations_decoder(positional_seq_encoder, sampled_perm)
-        decoded_inv = permutations_decoder(positional_seq_encoder, sampled_inv)
-        decoded_p = permutations_decoder(positional_seq_encoder, sampled_p)
-        decoded_q = permutations_decoder(positional_seq_encoder, sampled_q)
-        decoded_r = permutations_decoder(positional_seq_encoder, sampled_r)
-        dec_neural_inv_perm = permutations_decoder(
-            positional_seq_encoder, neural_inv_perm
-        )
-        dec_neural_comp_perm = permutations_decoder(
-            positional_seq_encoder, neural_comp_perm
-        )
-
-        # Reconstruction losses (averaged over 5 permutations)
-        reconstruction_losses = torch.tensor(0.0, device=device, dtype=dtype)
-        for decoded, original in zip(
-            [decoded_perm, decoded_inv, decoded_p, decoded_q, decoded_r],
-            [perm, inv, p, q, r],
-        ):
-            reconstruction_losses += (
-                permutation_encoder.embedder.nll_loss(decoded, original)
-                .mean(dim=0)
-                .sum()
-                / TOTAL_ENCODED_PERMUTATIONS
-            )
-        reconstruction_losses_weighted = (
-            reconstruction_losses * config.reconstruction_loss_weight
-        )
-
-        neural_inv_perm_loss = (
-            permutation_encoder.embedder.nll_loss(dec_neural_inv_perm, inv)
-            .mean(dim=0)
-            .sum()
-        )
-
-        neural_inv_perm_loss_weighted = (
-            neural_inv_perm_loss * config.neural_inv_perm_loss_weight
-        )
-
-        neural_comp_perm_loss = (
-            permutation_encoder.embedder.nll_loss(dec_neural_comp_perm, r)
-            .mean(dim=0)
-            .sum()
-        )
-        neural_comp_perm_loss_weighted = (
-            neural_comp_perm_loss * config.neural_comp_perm_loss_weight
-        )
-
-        # Add L2 losses in the latent space
-        # Use the target encoder for target values if available
-        if (
-            config.use_ema_target
-            and target_encoder is not None
-            and target_positional_encoder is not None
-        ):
-            with torch.no_grad():
-                target_inv_mus, _ = target_encoder(target_positional_encoder, inv)
-                target_r_mus, _ = target_encoder(target_positional_encoder, r)
-                # Get target encodings for all 5 permutations for the new loss
-                target_perm_mus, _ = target_encoder(target_positional_encoder, perm)
-                target_p_mus, _ = target_encoder(target_positional_encoder, p)
-                target_q_mus, _ = target_encoder(target_positional_encoder, q)
-        else:
-            with torch.no_grad():
-                target_inv_mus, _ = permutation_encoder(positional_seq_encoder, inv)
-                target_r_mus, _ = permutation_encoder(positional_seq_encoder, r)
-                # Get target encodings for all 5 permutations for the new loss
-                target_perm_mus, _ = permutation_encoder(positional_seq_encoder, perm)
-                target_p_mus, _ = permutation_encoder(positional_seq_encoder, p)
-                target_q_mus, _ = permutation_encoder(positional_seq_encoder, q)
-
-        if (
-            config.latent_inv_perm_loss_weight > 0
-            and get_latent_weight(
-                step,
-                config.latent_warmup_delay_steps,
-                config.latent_warmup_steps,
-                config.latent_warmup_start_weight,
-            )
-            > 0
-        ):
-            latent_inv_perm_loss = torch.norm(
-                live_to_target_adapter(positional_grid_encoder(neural_inv_perm))
-                - target_inv_mus,
-                p=2,
-                dim=1,
-            ).mean()
-            latent_inv_perm_loss_weighted = (
-                latent_inv_perm_loss
-                * config.latent_inv_perm_loss_weight
-                * get_latent_weight(
-                    step,
-                    config.latent_warmup_delay_steps,
-                    config.latent_warmup_steps,
-                    config.latent_warmup_start_weight,
-                )
-            )
-        else:
-            latent_inv_perm_loss_weighted = torch.tensor(
-                0.0, device=device, dtype=dtype
-            )
-
-        if (
-            config.latent_comp_perm_loss_weight > 0
-            and get_latent_weight(
-                step,
-                config.latent_warmup_delay_steps,
-                config.latent_warmup_steps,
-                config.latent_warmup_start_weight,
-            )
-            > 0
-        ):
-            latent_comp_perm_loss = torch.norm(
-                live_to_target_adapter(positional_grid_encoder(neural_comp_perm))
-                - target_r_mus,
-                p=2,
-                dim=1,
-            ).mean()
-            latent_comp_perm_loss_weighted = (
-                latent_comp_perm_loss
-                * config.latent_comp_perm_loss_weight
-                * get_latent_weight(
-                    step,
-                    config.latent_warmup_delay_steps,
-                    config.latent_warmup_steps,
-                    config.latent_warmup_start_weight,
-                )
-            )
-        else:
-            latent_comp_perm_loss_weighted = torch.tensor(
-                0.0, device=device, dtype=dtype
-            )
-
-        # Add the new loss for the 5 sampled permutations
-        if (
-            config.latent_sampled_perm_loss_weight > 0
-            and get_latent_weight(
-                step,
-                config.latent_warmup_delay_steps,
-                config.latent_warmup_steps,
-                config.latent_warmup_start_weight,
-            )
-            > 0
-        ):
-            latent_sampled_perm_losses = torch.tensor(0.0, device=device, dtype=dtype)
-            for sampled, target_mus in zip(
-                [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r],
-                [
-                    target_perm_mus,
-                    target_inv_mus,
-                    target_p_mus,
-                    target_q_mus,
-                    target_r_mus,
-                ],
-            ):
-                latent_sampled_perm_losses += (
-                    torch.norm(
-                        live_to_target_adapter(positional_grid_encoder(sampled))
-                        - target_mus,
-                        p=2,
-                        dim=1,
-                    ).mean()
-                    / TOTAL_ENCODED_PERMUTATIONS
-                )  # Average over the permutations using the constant
-
-            latent_sampled_perm_losses_weighted = (
-                latent_sampled_perm_losses
-                * config.latent_sampled_perm_loss_weight
-                * get_latent_weight(
-                    step,
-                    config.latent_warmup_delay_steps,
-                    config.latent_warmup_steps,
-                    config.latent_warmup_start_weight,
-                )
-            )
-        else:
-            latent_sampled_perm_losses_weighted = torch.tensor(
-                0.0, device=device, dtype=dtype
-            )
-
-        # Combine total loss
-        total_loss = (
-            kl_losses_weighted
-            + reconstruction_losses_weighted
-            + neural_inv_perm_loss_weighted
-            + neural_comp_perm_loss_weighted
-            + latent_inv_perm_loss_weighted
-            + latent_comp_perm_loss_weighted
-            + latent_sampled_perm_losses_weighted
-        )
-
-        # Optimize
-        optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
         scheduler.step()
+        optimizer.zero_grad()
 
         # Update target network with EMA if enabled
         if (
@@ -786,6 +295,47 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 ),
             )
 
+        if step % config.log_interval == 0:
+            if config.wandb_enabled:
+                wandb.log({
+                    "train/total_loss": total_loss.item(),
+                    "train/kl_loss": losses.kl_losses.item(),
+                    "train/kl_loss_weighted": kl_weighted_loss.item(),
+                    "train/vae_reconstruction_nll": losses.vae_reconstruction_nll.item(),
+                    "train/vae_reconstruction_nll_weighted": vae_reconstruction_nll_weighted.item(),
+                    "train/inv_reconstruction_nll": losses.inv_reconstruction_nll.item(),
+                    "train/inv_reconstruction_nll_weighted": inv_reconstruction_nll_weighted.item(),
+                    "train/comp_reconstruction_nll": losses.comp_reconstruction_nll.item(),
+                    "train/comp_reconstruction_nll_weighted": comp_reconstruction_nll_weighted.item(),
+                    "train/live_to_target_l2": losses.live_to_target_l2.item(),
+                    "train/live_to_target_l2_weighted": live_to_target_l2_weightes.item(),
+                    "train/inv_latent_l2": losses.target_inv_l2.item(),
+                    "train/inv_latent_l2_weighted": inv_latent_l2_weight.item(),
+                    "train/comp_latent_l2": losses.target_comp_l2.item(),
+                    "train/comp_latent_l2_weighted": comp_latent_l2_weight.item(),
+                    "train/latent_weight": latent_l2_losses_weight.item(),
+                    "train/kl_weight": kl_weight.item(),
+                    "train/ema_tau": get_ema_tau(
+                        step,
+                        config.ema_tau_warmup_steps,
+                        config.ema_tau_start,
+                        config.ema_tau_final,
+                    ),
+                    "train/lr": scheduler.get_last_lr()[0],
+                },
+                step=step,
+                )
+            logger.info(
+                f"[Train step {step}] total={total_loss:.4f}, "
+                f"kl={losses.kl_losses.item():.4f}, "
+                f"vae_recon={losses.vae_reconstruction_nll.item():.4f}, "
+                f"inv_recon={losses.inv_reconstruction_nll.item():.4f}, "
+                f"comp_recon={losses.comp_reconstruction_nll.item():.4f}, "
+                f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
+                f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
+                f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
+            )
+
         # Log training losses
         if step % config.log_interval == 0:
             current_lr = scheduler.get_last_lr()[0]
@@ -806,41 +356,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 config.ema_tau_warmup_steps,
                 config.ema_tau_start,
                 config.ema_tau_final,
-            )
-            if config.wandb_enabled:
-                wandb.log(
-                    {
-                        "train/total_loss": total_loss.item(),
-                        "train/kl_loss": kl_losses.item(),  # raw KL
-                        "train/kl_loss_weighted": kl_losses_weighted.item(),
-                        "train/reconstruction_loss": reconstruction_losses.item(),
-                        "train/reconstruction_loss_weighted": reconstruction_losses_weighted.item(),
-                        "train/neural_inv_perm_loss": neural_inv_perm_loss.item(),
-                        "train/neural_inv_perm_loss_weighted": neural_inv_perm_loss_weighted.item(),
-                        "train/neural_comp_perm_loss": neural_comp_perm_loss.item(),
-                        "train/neural_comp_perm_loss_weighted": neural_comp_perm_loss_weighted.item(),
-                        "train/latent_inv_perm_loss": latent_inv_perm_loss.item(),
-                        "train/latent_comp_perm_loss": latent_comp_perm_loss.item(),
-                        "train/latent_sampled_perm_losses": latent_sampled_perm_losses.item(),
-                        "train/latent_sampled_perm_losses_weighted": latent_sampled_perm_losses_weighted.item(),
-                        "train/learning_rate": current_lr,
-                        "train/kl_weight": current_kl_weight,
-                        "train/latent_weight": current_latent_weight,
-                        "train/ema_tau": current_ema_tau,
-                    },
-                    step=step,
-                )
-            logger.info(
-                f"[Train step {step}] total={total_loss:.4f}, "
-                f"kl={kl_losses:.4f}, "
-                f"kl_weight={current_kl_weight:.6f}, "
-                f"recon={reconstruction_losses:.4f}, "
-                f"neural_inv_perm_loss={neural_inv_perm_loss:.4f}, "
-                f"neural_comp_perm_loss={neural_comp_perm_loss:.4f}, "
-                f"latent_inv_perm_loss={latent_inv_perm_loss:.4f}, "
-                f"latent_comp_perm_loss={latent_comp_perm_loss:.4f}, "
-                f"latent_sampled_perm_losses={latent_sampled_perm_losses:.4f}, "
-                f"lr={current_lr:.6f}"
             )
 
     return 0

@@ -49,12 +49,12 @@ class TrainingLoopInput:
 @dataclasses.dataclass
 class TrainingLoopIterationOutput:
     kl_losses: torch.Tensor
-    live_to_target_l2: torch.Tensor
     vae_reconstruction_nll: torch.Tensor
-    target_inv_l2: torch.Tensor
-    target_comp_l2: torch.Tensor
     inv_reconstruction_nll: torch.Tensor
     comp_reconstruction_nll: torch.Tensor
+    target_inv_l2: torch.Tensor
+    target_comp_l2: torch.Tensor
+    live_to_target_l2: torch.Tensor
 
 
 TOTAL_ENCODED_PERMUTATIONS = 5
@@ -191,13 +191,13 @@ def training_loop_iteration(
 
     # Construct l2 loss to target network inv, r
     target_inv_l2 = torch.norm(
-        live_to_target_adapter(positional_grid_encoder(dec_neural_inv_perm))
+        live_to_target_adapter(positional_grid_encoder(neural_inv_perm))
         - te_inv_mus,
         p=2,
         dim=1,
     ).mean()
     target_comp_l2 = torch.norm(
-        live_to_target_adapter(positional_grid_encoder(dec_neural_comp_perm))
+        live_to_target_adapter(positional_grid_encoder(neural_comp_perm))
         - te_r_mus,
         p=2,
         dim=1,
@@ -213,10 +213,10 @@ def training_loop_iteration(
 
     return TrainingLoopIterationOutput(
         kl_losses=kl_losses,
-        live_to_target_l2=live_to_target_l2,
         vae_reconstruction_nll=vae_reconstruction_nll,
-        target_inv_l2=target_inv_l2,
-        target_comp_l2=target_comp_l2,
         inv_reconstruction_nll=inv_reconstruction_nll,
         comp_reconstruction_nll=comp_reconstruction_nll,
+        live_to_target_l2=live_to_target_l2,
+        target_inv_l2=target_inv_l2,
+        target_comp_l2=target_comp_l2,
     )
