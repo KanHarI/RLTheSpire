@@ -30,10 +30,13 @@ optimizer:
   beta2: 0.999
   weight_decay: 0.01
 vae:
-  gamma: 0.5
   kl_loss_weight: 0.01
   kl_warmup_steps: 500
   kl_warmup_start_weight: 0.0
+  # Gamma parameters
+  gamma_warmup_steps: 2000
+  gamma_start: 5.0  # Start with high value (less noise)
+  gamma_final: 0.5  # Final gamma value (more exploration)
 conv_transformer:
   n_heads: 4
   denoiser_blocks: 1

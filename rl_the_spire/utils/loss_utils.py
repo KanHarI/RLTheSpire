@@ -29,6 +29,34 @@ def get_kl_weight(
     return target_weight
 
 
+def get_vae_gamma(
+    current_step: int,
+    warmup_steps: int,
+    gamma_start: float,
+    gamma_final: float,
+) -> float:
+    """
+    Calculate the VAE gamma parameter with cosine annealing warmup.
+
+    Args:
+        current_step: Current training step
+        warmup_steps: Number of warmup steps
+        gamma_start: Initial gamma value at step 0
+        gamma_final: Final gamma value after warmup
+
+    Returns:
+        Current gamma value
+    """
+    # Cosine annealing of gamma from start to final value
+    if current_step < warmup_steps:
+        progress = float(current_step) / float(max(1, warmup_steps))
+        cosine_factor = 0.5 * (
+            1.0 - torch.cos(torch.tensor(torch.pi * progress)).item()
+        )
+        return gamma_start + (gamma_final - gamma_start) * cosine_factor
+    return gamma_final
+
+
 def get_latent_weight(
     current_step: int,
     warmup_delay_steps: int,

@@ -1,4 +1,8 @@
-from rl_the_spire.utils.loss_utils import get_kl_weight, get_latent_weight
+from rl_the_spire.utils.loss_utils import (
+    get_kl_weight,
+    get_latent_weight,
+    get_vae_gamma,
+)
 from rl_the_spire.utils.training_utils import ema_update, get_ema_tau, lr_lambda
 
 __all__ = [
@@ -7,4 +11,5 @@ __all__ = [
     "ema_update",
     "get_kl_weight",
     "get_latent_weight",
+    "get_vae_gamma",
 ]

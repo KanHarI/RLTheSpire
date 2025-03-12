@@ -2,7 +2,7 @@ import torch
 
 
 def gamma_vae_sample(
-    mus: torch.Tensor, logvars: torch.Tensor, gamma: float
+    mus: torch.Tensor, logvars: torch.Tensor, gamma: float, batch_dims: int
 ) -> torch.Tensor:
     """
     Sample from a Gaussian distribution using the reparameterization trick with an extra uniform scaling factor.
@@ -19,6 +19,7 @@ def gamma_vae_sample(
         logvars (torch.Tensor): Log-variance tensor of shape [B, ...].
         gamma (float): Exponent controlling the scaling of the standard deviation.
                        gamma=0 yields standard sampling, higher gammas reduce effective variance.
+        batch_dims (int): Number of batch dimensions to keep.
 
     Returns:
         torch.Tensor: A sample tensor of shape [B, ...].
@@ -28,7 +29,9 @@ def gamma_vae_sample(
 
     # Sample one uniform value per batch item.
     # Create a tensor of shape [B, 1, 1, ..., 1] that can broadcast to the shape of mus.
-    batch_shape = (mus.shape[0],) + (1,) * (mus.dim() - 1)
+    batch_dims_shape = list(mus.shape[:batch_dims])
+    padding_dims = [1] * (mus.dim() - batch_dims)
+    batch_shape = batch_dims_shape + padding_dims
     u = torch.rand(batch_shape, dtype=mus.dtype, device=mus.device)
 
     # Compute the scaling factor.
@@ -38,4 +41,5 @@ def gamma_vae_sample(
     epsilon = torch.randn_like(mus)
 
     # Return the reparameterized sample.
-    return mus + scaling * sigma * epsilon  # type: ignore
+    result: torch.Tensor = mus + scaling * sigma * epsilon
+    return result

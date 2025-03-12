@@ -25,7 +25,11 @@ from rl_the_spire.experiments.permutations_group.grid_vae.training_loop_iteratio
     TrainingLoopInput,
     training_loop_iteration,
 )
-from rl_the_spire.utils.loss_utils import get_kl_weight, get_latent_weight
+from rl_the_spire.utils.loss_utils import (
+    get_kl_weight,
+    get_latent_weight,
+    get_vae_gamma,
+)
 from rl_the_spire.utils.training_utils import ema_update, get_ema_tau, lr_lambda
 
 # Configure logger
@@ -120,6 +124,11 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         f"Setting up EMA tau warmup over {config.ema_tau_warmup_steps} steps from {config.ema_tau_start} to {config.ema_tau_final}..."
     )
 
+    # Log for gamma warmup (new)
+    logger.info(
+        f"Setting up VAE gamma warmup over {config.vae.gamma_warmup_steps} steps from {config.vae.gamma_start} to {config.vae.gamma_final}..."
+    )
+
     if config.wandb_enabled:
         # 6. Initialize Weights & Biases
         logger.info("Initializing WanDB...")
@@ -141,6 +150,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             #     model.eval()
 
             with torch.no_grad():
+                # Calculate the current gamma value based on warmup schedule
+                current_gamma = get_vae_gamma(
+                    step,
+                    config.vae.gamma_warmup_steps,
+                    config.vae.gamma_start,
+                    config.vae.gamma_final,
+                )
+
                 losses = training_loop_iteration(
                     TrainingLoopInput(
                         learned_networks_tuple=learned_networks_tuple,
@@ -149,7 +166,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                             target_positional_encoder,
                         ),
                         dataloaders=(inversions_dataloader, composition_dataloader),
-                        vae_gamma=config.vae.gamma,
+                        vae_gamma=current_gamma,
                         device=device,
                         dtype=dtype,
                     )
@@ -245,6 +262,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                                 config.ema_tau_start,
                                 config.ema_tau_final,
                             ),
+                            "eval/vae_gamma": current_gamma,
                         },
                         step=step,
                     )
@@ -258,6 +276,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
                 f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
                 f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
+                f"gamma={current_gamma:.4f}"
             )
 
         # -------------------
@@ -267,12 +286,20 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # for model in learned_networks_tuple:
         #     model.train()
 
+        # Calculate the current gamma value based on warmup schedule
+        current_gamma = get_vae_gamma(
+            step,
+            config.vae.gamma_warmup_steps,
+            config.vae.gamma_start,
+            config.vae.gamma_final,
+        )
+
         losses = training_loop_iteration(
             TrainingLoopInput(
                 learned_networks_tuple=learned_networks_tuple,
                 target_networks_tuple=(target_encoder, target_positional_encoder),
                 dataloaders=(inversions_dataloader, composition_dataloader),
-                vae_gamma=config.vae.gamma,
+                vae_gamma=current_gamma,
                 device=device,
                 dtype=dtype,
             )
@@ -393,6 +420,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                             config.ema_tau_final,
                         ),
                         "train/lr": scheduler.get_last_lr()[0],
+                        "train/vae_gamma": current_gamma,
                     },
                     step=step,
                 )
@@ -407,7 +435,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
                 f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
                 f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
-                f"lr={scheduler.get_last_lr()[0]:.6f}",
+                f"lr={scheduler.get_last_lr()[0]:.6f}, "
+                f"gamma={current_gamma:.4f}"
             )
 
     return 0
