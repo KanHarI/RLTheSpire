@@ -68,15 +68,15 @@ class PermutationEmbedder(torch.nn.Module):
         # Ensure x has at least 3 dimensions (add batch dim if needed)
         if x.dim() == 2:
             x = x.unsqueeze(-3)
-            
+
         # Compute logits and log probabilities
         logits = torch.matmul(x, self.c_perm.t())
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-        
+
         # If input was 2D, output should be 2D as well
         if x.dim() == 3 and x.size(-3) == 1:
             log_probs = log_probs.squeeze(-3)
-            
+
         return log_probs
 
     def nll_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -98,24 +98,26 @@ class PermutationEmbedder(torch.nn.Module):
                 - scalar
         """
         # Track if we need to squeeze the output at the end
-        needs_squeeze = (x.dim() == 2)
-        
+        needs_squeeze = x.dim() == 2
+
         # Ensure x has at least 3 dimensions (add batch dim if needed)
         if needs_squeeze:
             x = x.unsqueeze(-3)
             y = y.unsqueeze(-2)
-        
+
         # Get log probabilities
         log_probs = self.get_logprobs(x)
-        
+
         # Gather target log probabilities
-        target_log_probs = torch.gather(log_probs, dim=-1, index=y.unsqueeze(-1)).squeeze(-1)
-        
+        target_log_probs = torch.gather(
+            log_probs, dim=-1, index=y.unsqueeze(-1)
+        ).squeeze(-1)
+
         # Sum across the permutation dimension to get NLL per example
         nll = -torch.sum(target_log_probs, dim=-1)
-        
+
         # If input was 2D, output should be a scalar
         if needs_squeeze:
             nll = nll.squeeze(-1)
-            
+
         return nll

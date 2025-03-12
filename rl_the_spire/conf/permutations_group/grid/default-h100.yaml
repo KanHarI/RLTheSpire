@@ -8,12 +8,12 @@ encoder:
   n_embed: 256
   n_heads: 8
   n_layers: 8
-  encoder_attn_dropout: 0.0  # Encoder-specific dropout
-  encoder_resid_dropout: 0.0  # Encoder-specific dropout
+  encoder_attn_dropout: 0.1
+  encoder_resid_dropout: 0.1
+  encoder_mlp_dropout: 0.1
   dtype: "float32"
   device: "cuda"
   init_std: 0.02
-  encoder_mlp_dropout: 0.0  # Encoder-specific dropout
   ln_eps: 1e-5
   n_output_heads: 4
   n_output_embed: 64
