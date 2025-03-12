@@ -65,16 +65,19 @@ class PermutationEmbedder(torch.nn.Module):
                 - (S, batch_size, n_max_permutation_size, n_max_permutation_size)
                 - (n_max_permutation_size, n_max_permutation_size)
         """
+        # Store original dimensionality to determine if we need to squeeze later
+        was_2d = x.dim() == 2
+        
         # Ensure x has at least 3 dimensions (add batch dim if needed)
-        if x.dim() == 2:
+        if was_2d:
             x = x.unsqueeze(-3)
 
         # Compute logits and log probabilities
         logits = torch.matmul(x, self.c_perm.t())
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
 
-        # If input was 2D, output should be 2D as well
-        if x.dim() == 3 and x.size(-3) == 1:
+        # Only squeeze if the input was originally 2D
+        if was_2d:
             log_probs = log_probs.squeeze(-3)
 
         return log_probs
