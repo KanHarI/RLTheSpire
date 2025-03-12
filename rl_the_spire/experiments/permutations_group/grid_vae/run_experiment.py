@@ -141,32 +141,32 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 model.eval()
 
             with torch.no_grad():
-                losses = training_loop_iteration(
-                    TrainingLoopInput(
-                        learned_networks_tuple=learned_networks_tuple,
-                        target_networks_tuple=(
-                            target_encoder,
-                            target_positional_encoder,
-                        ),
-                        dataloaders=(inversions_dataloader, composition_dataloader),
-                        vae_gamma=config.vae.gamma,
-                        device=device,
-                        dtype=dtype,
-                    )
-                )
-                kl_weight = get_kl_weight(
-                    step,
-                    config.vae.kl_warmup_steps,
-                    config.vae.kl_warmup_start_weight,
-                    config.vae.kl_loss_weight,
-                )
-                kl_weighted_loss = losses.kl_losses * kl_weight
-                latent_l2_losses_weight = get_latent_weight(
-                    step,
-                    config.latent_warmup_delay_steps,
-                    config.latent_warmup_steps,
-                    config.latent_warmup_start_weight,
-                )
+                # losses = training_loop_iteration(
+                #     TrainingLoopInput(
+                #         learned_networks_tuple=learned_networks_tuple,
+                #         target_networks_tuple=(
+                #             target_encoder,
+                #             target_positional_encoder,
+                #         ),
+                #         dataloaders=(inversions_dataloader, composition_dataloader),
+                #         vae_gamma=config.vae.gamma,
+                #         device=device,
+                #         dtype=dtype,
+                #     )
+                # )
+                # kl_weight = get_kl_weight(
+                #     step,
+                #     config.vae.kl_warmup_steps,
+                #     config.vae.kl_warmup_start_weight,
+                #     config.vae.kl_loss_weight,
+                # )
+                # kl_weighted_loss = losses.kl_losses * kl_weight
+                # latent_l2_losses_weight = get_latent_weight(
+                #     step,
+                #     config.latent_warmup_delay_steps,
+                #     config.latent_warmup_steps,
+                #     config.latent_warmup_start_weight,
+                # )
 
                 # Sample new data for evaluation
                 eval_perm, eval_inv = next(inversions_dataloader)

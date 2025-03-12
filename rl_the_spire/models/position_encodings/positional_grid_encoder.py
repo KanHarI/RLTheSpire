@@ -57,17 +57,29 @@ class PositionalGridEncoder(torch.nn.Module):
         Apply positional encodings to the grid of embeddings.
 
         Args:
-            x: [batch_size, n_rows, n_cols, n_embed] tensor
+            x: Tensor with shape [..., n_rows, n_cols, n_embed] 
+               Supports shapes [batch_size, n_rows, n_cols, n_embed], 
+               [seq_len, batch_size, n_rows, n_cols, n_embed], or just [n_rows, n_cols, n_embed]
 
         Returns:
-            x with positional encodings added: [batch_size, n_rows, n_cols, n_embed]
+            x with positional encodings added: Same shape as input
         """
-        # Create row positional encodings [1, n_rows, 1, n_embed]
-        row_pos = self.row_embeddings.unsqueeze(0).unsqueeze(2)
-
-        # Create column positional encodings [1, 1, n_cols, n_embed]
-        col_pos = self.col_embeddings.unsqueeze(0).unsqueeze(1)
-
+        # Extract shape components, with *B capturing any leading dimensions
+        *B, R, C, E = x.shape
+        
+        # Validate the trailing dimensions match our configuration
+        assert R == self.n_rows, f"Expected {self.n_rows} rows, got {R}"
+        assert C == self.n_cols, f"Expected {self.n_cols} columns, got {C}" 
+        assert E == self.n_embed, f"Expected {self.n_embed} embedding dim, got {E}"
+        
+        # Create row positional encodings and reshape for broadcasting with any input shape
+        # For any leading dimensions, add singleton dimensions
+        leading_dims = len(B)
+        row_pos = self.row_embeddings.view(*([1] * leading_dims), self.n_rows, 1, self.n_embed)
+        
+        # Create column positional encodings with singleton dimensions for broadcasting
+        col_pos = self.col_embeddings.view(*([1] * leading_dims), 1, self.n_cols, self.n_embed)
+        
         # Add positional encodings to the input
-        # The broadcasting will ensure row_pos is added to each column and col_pos to each row
+        # Broadcasting handles adding row_pos to each column and col_pos to each row
         return x + row_pos + col_pos

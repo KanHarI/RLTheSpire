@@ -167,67 +167,83 @@ class ConvTransformerBlock(nn.Module):
         # Get the dimensions
         dims = len(x.shape)
         *B, N, M, E = x.shape
-        # If B is empty (no batch dimensions), set it to an empty list for reshape operations
+        
+        # Handle the case with no batch dimensions
         B = B if B else []
         batch_dims = dims - 3  # Number of batch dimensions (everything except N, M, E)
         
         # Calculate the product of leading batch dimensions
         B_prod = np.prod(B) if B else 1
         
+        # Define dimension indices for clarity
+        n_idx, m_idx, e_idx = batch_dims, batch_dims + 1, batch_dims + 2
+        batch_indices = list(range(batch_dims))
+        
         # --- Attention along N dimension ---
-        # Normalize 
         x_ln = self.ln_attn_n(x)
         
-        # Create dynamic permutation indices to swap N and M
-        # For shape (*B, N, M, E) to (*B, M, N, E)
-        batch_indices = list(range(batch_dims))
-        n_idx, m_idx, e_idx = batch_dims, batch_dims + 1, batch_dims + 2
+        # For attention along N, we need to reshape to make N the sequence dimension
+        # First permute to shape (*B, M, N, E) so that N becomes the "sequence" dimension
         forward_perm = batch_indices + [m_idx, n_idx, e_idx]  # Put M before N
-        
-        # Reshape for attention on N dimension
         x_n = x_ln.permute(*forward_perm)  # shape: (*B, M, N, E)
-        # Reshape to combine batch dims and M
+        
+        # Reshape to combine batch dims and M for attention
         x_n = x_n.reshape(B_prod * M, N, E)
         attn_n_out = self.attn_n(x_n)  # shape: (B_prod*M, N, E)
         
-        # Reshape back to (*B, M, N, E)
+        # Reshape back and permute to original order
         attn_n_out = attn_n_out.reshape(*B, M, N, E)
-        
-        # Permute back to original dimension order (*B, N, M, E)
-        inverse_perm = batch_indices + [n_idx, m_idx, e_idx]  # Put N before M
+        # Permute from (*B, M, N, E) back to (*B, N, M, E)
+        # This is the inverse of the forward_perm which was batch_indices + [m_idx, n_idx, e_idx]
+        # To go from (*B, M, N, E) to (*B, N, M, E), we need to swap the M and N positions
+        inverse_perm = batch_indices.copy()  # Start with batch dimensions
+        # Then add dimensions in the order N, M, E
+        inverse_perm.extend([batch_dims + 1, batch_dims, batch_dims + 2])
         attn_n_out = attn_n_out.permute(*inverse_perm)
         
+        # Add residual connection
         x = x + attn_n_out
         
+        # MLP after first attention
         x = x + self.mlp_1(self.ln_mlp_1(x))
         
         # --- Attention along M dimension ---
-        # Normalize and reshape to (B_prod*N, M, E): each row (fixed N) is a sequence of length M.
         x_ln = self.ln_attn_m(x)
+        
+        # For attention along M, we can directly reshape
         # Reshape to combine batch dims and N
         x_m = x_ln.reshape(B_prod * N, M, E)
         attn_m_out = self.attn_m(x_m)  # shape: (B_prod*N, M, E)
+        
+        # Reshape back to original shape
         attn_m_out = attn_m_out.reshape(*B, N, M, E)
+        
+        # Add residual connection
         x = x + attn_m_out
         
+        # MLP after second attention
         x = x + self.mlp_2(self.ln_mlp_2(x))
         
         # --- 3x3 Convolution on the (N, M) plane ---
-        # Normalize and permute for convolution
         x_ln = self.ln_conv(x)
         
-        # First reshape to (-1, N, M, E) by flattening all leading batch dimensions
+        # Reshape for convolution: (*B, N, M, E) -> (B_flat, E, N, M)
+        # First flatten batch dimensions
         x_reshaped = x_ln.reshape(-1, N, M, E)
+        # Then permute to channel-first format for convolution
+        x_perm = x_reshaped.permute(0, 3, 1, 2)  # (B_flat, E, N, M)
         
-        # Standard permutation for convolutional format (B_flat, E, N, M)
-        x_perm = x_reshaped.permute(0, 3, 1, 2)
-        conv_out = self.conv(x_perm)
+        # Apply convolution
+        conv_out = self.conv(x_perm)  # Still (B_flat, E, N, M)
         
-        # Reshape back to original shape
-        conv_out = conv_out.permute(0, 2, 3, 1)  # back to (B_flat, N, M, E)
-        conv_out = conv_out.reshape(*B, N, M, E)  # restore leading batch dimensions
+        # Permute back and reshape to original shape
+        conv_out = conv_out.permute(0, 2, 3, 1)  # (B_flat, N, M, E)
+        conv_out = conv_out.reshape(*B, N, M, E)
+        
+        # Add residual connection
         x = x + conv_out
         
+        # Final MLP
         x = x + self.mlp_3(self.ln_mlp_3(x))
         
         return x
