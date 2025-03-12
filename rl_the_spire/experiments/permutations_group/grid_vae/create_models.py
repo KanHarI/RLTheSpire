@@ -77,9 +77,11 @@ def create_target_models(
         for param in target_positional_encoder.parameters():
             param.data.zero_()
 
-    # Set to eval mode, we never train this directly
-    target_encoder.eval()
-    target_positional_encoder.eval()
+    # We use torch.no_grad() when needed; We do want these dropout layers active
+    # target_encoder.eval()
+    # target_positional_encoder.eval()
+    target_encoder.train()
+    target_positional_encoder.train()
 
     return target_encoder, target_positional_encoder
 
@@ -146,6 +148,7 @@ def create_models(
     )
     permutation_encoder = PermutationGridEncoder(permutation_encoder_config)
     permutation_encoder.init_weights()
+    permutation_encoder.train()
 
     # Create the positional sequence encoder
     logger.info("Creating positional sequence encoder...")
@@ -176,6 +179,7 @@ def create_models(
     )
     denoiser_network = ConvTransformerBody(denoiser_network_config)
     denoiser_network.init_weights()
+    denoiser_network.train()
 
     # Create permutations decoder
     logger.info("Creating permutations decoder...")
@@ -200,7 +204,7 @@ def create_models(
     )
     permutations_decoder = PermutationGridDecoder(permutations_decoder_config)
     permutations_decoder.init_weights()
-
+    permutations_decoder.train()
     # Create inverter network
     logger.info("Creating inverter network...")
     inverter_network_config = ConvTransformerBodyConfig(
@@ -219,6 +223,7 @@ def create_models(
     )
     inverter_network = ConvTransformerBody(inverter_network_config)
     inverter_network.init_weights()
+    inverter_network.train()
 
     # Create composer network
     logger.info("Creating composer network...")
@@ -238,6 +243,7 @@ def create_models(
     )
     composer_network = PermutationComposer(composer_network_config)
     composer_network.init_weights()
+    composer_network.train()
 
     # Create live to target adapter
     logger.info("Creating live to target adapter...")
@@ -257,6 +263,7 @@ def create_models(
     )
     live_to_target_adapter = ConvTransformerBody(live_to_target_adapter_config)
     live_to_target_adapter.init_weights()
+    live_to_target_adapter.train()
 
     # Create positional grid encoder
     logger.info("Creating positional grid encoder...")
@@ -269,6 +276,7 @@ def create_models(
     )
     positional_grid_encoder = PositionalGridEncoder(positional_grid_encoder_config)
     positional_grid_encoder.init_weights()
+    positional_grid_encoder.train()
 
     # Return all created models as a tuple
     return (

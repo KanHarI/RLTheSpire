@@ -133,8 +133,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         #       EVAL
         # -------------------
         if step % config.eval_interval == 0:
-            for model in learned_networks_tuple:
-                model.eval()
+            # We do not need eval mode, let the dropout be as it is
+            # for model in learned_networks_tuple:
+            #     model.eval()
 
             with torch.no_grad():
                 losses = training_loop_iteration(
@@ -259,8 +260,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # -------------------
         #      TRAIN
         # -------------------
-        for model in learned_networks_tuple:
-            model.train()
+        # Commented out on purpose for now
+        # for model in learned_networks_tuple:
+        #     model.train()
 
         losses = training_loop_iteration(
             TrainingLoopInput(
