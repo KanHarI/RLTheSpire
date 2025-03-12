@@ -59,5 +59,5 @@ def get_latent_weight(
         cosine_factor = 0.5 * (
             1.0 + torch.cos(torch.tensor(torch.pi * (1 - progress))).item()
         )
-        return 1.0 - (1.0 - warmup_start_weight) * cosine_factor
+        return warmup_start_weight + (1.0 - warmup_start_weight) * (1.0 - cosine_factor)
     return 1.0

@@ -67,7 +67,7 @@ class PermutationEmbedder(torch.nn.Module):
         """
         # Store original dimensionality to determine if we need to squeeze later
         was_2d = x.dim() == 2
-        
+
         # Ensure x has at least 3 dimensions (add batch dim if needed)
         if was_2d:
             x = x.unsqueeze(-3)
