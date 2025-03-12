@@ -65,27 +65,17 @@ class PermutationEmbedder(torch.nn.Module):
                 - (S, batch_size, n_max_permutation_size, n_max_permutation_size)
                 - (n_max_permutation_size, n_max_permutation_size)
         """
-        original_shape = x.shape
-        
-        # Handle single example without batch dimension
-        if len(original_shape) == 2:
-            x = x.unsqueeze(0)  # Add batch dimension
+        # Ensure x has at least 3 dimensions (add batch dim if needed)
+        if x.dim() == 2:
+            x = x.unsqueeze(-3)
             
-        # Handle sequence dimension
-        has_seq_dim = len(x.shape) == 4
-        if has_seq_dim:
-            S, B, P, E = x.shape
-            x = x.reshape(S * B, P, E)
-        
-        # Original computation
+        # Compute logits and log probabilities
         logits = torch.matmul(x, self.c_perm.t())
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
         
-        # Reshape back to original dimensions
-        if has_seq_dim:
-            log_probs = log_probs.reshape(S, B, P, -1)
-        elif len(original_shape) == 2:
-            log_probs = log_probs.squeeze(0)  # Remove batch dimension
+        # If input was 2D, output should be 2D as well
+        if x.dim() == 3 and x.size(-3) == 1:
+            log_probs = log_probs.squeeze(-3)
             
         return log_probs
 
@@ -107,34 +97,25 @@ class PermutationEmbedder(torch.nn.Module):
                 - (S, batch_size)
                 - scalar
         """
-        original_x_shape = x.shape
-        original_y_shape = y.shape
+        # Track if we need to squeeze the output at the end
+        needs_squeeze = (x.dim() == 2)
         
-        # Handle single example without batch dimension
-        if len(original_x_shape) == 2:
-            x = x.unsqueeze(0)  # Add batch dimension
-            y = y.unsqueeze(0)  # Add batch dimension
-            
-        # Handle sequence dimension
-        has_seq_dim = len(x.shape) == 4
-        if has_seq_dim:
-            S, B, P, E = x.shape
-            x = x.reshape(S * B, P, E)
-            y = y.reshape(S * B, P)
+        # Ensure x has at least 3 dimensions (add batch dim if needed)
+        if needs_squeeze:
+            x = x.unsqueeze(-3)
+            y = y.unsqueeze(-2)
         
         # Get log probabilities
         log_probs = self.get_logprobs(x)
         
         # Gather target log probabilities
-        target_log_probs = torch.gather(log_probs, dim=2, index=y.unsqueeze(2)).squeeze(2)
+        target_log_probs = torch.gather(log_probs, dim=-1, index=y.unsqueeze(-1)).squeeze(-1)
         
         # Sum across the permutation dimension to get NLL per example
-        nll = -torch.sum(target_log_probs, dim=1)
+        nll = -torch.sum(target_log_probs, dim=-1)
         
-        # Reshape back to match original dimensions
-        if has_seq_dim:
-            nll = nll.reshape(S, B)
-        elif len(original_x_shape) == 2:
-            nll = nll.squeeze(0)  # Remove batch dimension
+        # If input was 2D, output should be a scalar
+        if needs_squeeze:
+            nll = nll.squeeze(-1)
             
         return nll

@@ -43,6 +43,10 @@ class PermutationGroupGridExperimentConfig:
     latent_inv_perm_loss_weight: float
     latent_comp_perm_loss_weight: float
     latent_sampled_perm_loss_weight: float
+    # General dropout parameters for non-encoder components
+    attn_dropout: float
+    resid_dropout: float
+    mlp_dropout: float
     # Latent loss warmup parameters
     latent_warmup_steps: int
     latent_warmup_start_weight: float

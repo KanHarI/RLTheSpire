@@ -22,8 +22,6 @@ from rl_the_spire.experiments.permutations_group.grid_vae.training_loop_iteratio
     TrainingLoopInput,
     training_loop_iteration,
 )
-from rl_the_spire.models.vaes.gamma_vae_sample import gamma_vae_sample
-from rl_the_spire.models.vaes.kl_loss import kl_loss
 from rl_the_spire.utils.loss_utils import get_kl_weight, get_latent_weight
 from rl_the_spire.utils.training_utils import ema_update, get_ema_tau, lr_lambda
 
@@ -51,8 +49,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     logger.info("Initializing experiment...")
 
     inversions_dataloader, composition_dataloader = create_dataloaders(config.dataset)
-
-    TOTAL_ENCODED_PERMUTATIONS = 5  # constant used to average out loss components
 
     # Create all models
     logger.info("Creating models...")
@@ -154,66 +150,101 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         dtype=dtype,
                     )
                 )
-                kl_weight = get_kl_weight(
-                    step,
-                    config.vae.kl_warmup_steps,
-                    config.vae.kl_warmup_start_weight,
-                    config.vae.kl_loss_weight,
+                kl_weight = torch.tensor(
+                    get_kl_weight(
+                        step,
+                        config.vae.kl_warmup_steps,
+                        config.vae.kl_warmup_start_weight,
+                        config.vae.kl_loss_weight,
+                    ),
+                    device=device,
+                    dtype=dtype,
                 )
                 kl_weighted_loss = losses.kl_losses * kl_weight
-                vae_reconstruction_nll_weighted = losses.vae_reconstruction_nll * config.reconstruction_loss_weight
-                inv_reconstruction_nll_weighted = losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
-                comp_reconstruction_nll_weighted = losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
-                latent_l2_losses_weight = get_latent_weight(
-                    step,
-                    config.latent_warmup_delay_steps,
-                    config.latent_warmup_steps,
-                    config.latent_warmup_start_weight,
+                vae_reconstruction_nll_weighted = (
+                    losses.vae_reconstruction_nll * config.reconstruction_loss_weight
                 )
-                live_to_target_l2_weightes = losses.live_to_target_l2 * config.latent_sampled_perm_loss_weight * latent_l2_losses_weight
-                inv_latent_l2_weight = losses.target_inv_l2 * config.latent_inv_perm_loss_weight * latent_l2_losses_weight
-                comp_latent_l2_weight = losses.target_comp_l2 * config.latent_comp_perm_loss_weight * latent_l2_losses_weight
-                total_loss = kl_weighted_loss + vae_reconstruction_nll_weighted + inv_reconstruction_nll_weighted + comp_reconstruction_nll_weighted + live_to_target_l2_weightes + inv_latent_l2_weight + comp_latent_l2_weight
+                inv_reconstruction_nll_weighted = (
+                    losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
+                )
+                comp_reconstruction_nll_weighted = (
+                    losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
+                )
+                latent_l2_losses_weight = torch.tensor(
+                    get_latent_weight(
+                        step,
+                        config.latent_warmup_delay_steps,
+                        config.latent_warmup_steps,
+                        config.latent_warmup_start_weight,
+                    ),
+                    device=device,
+                    dtype=dtype,
+                )
+                live_to_target_l2_weightes = (
+                    losses.live_to_target_l2
+                    * config.latent_sampled_perm_loss_weight
+                    * latent_l2_losses_weight
+                )
+                inv_latent_l2_weight = (
+                    losses.target_inv_l2
+                    * config.latent_inv_perm_loss_weight
+                    * latent_l2_losses_weight
+                )
+                comp_latent_l2_weight = (
+                    losses.target_comp_l2
+                    * config.latent_comp_perm_loss_weight
+                    * latent_l2_losses_weight
+                )
+                total_loss = (
+                    kl_weighted_loss
+                    + vae_reconstruction_nll_weighted
+                    + inv_reconstruction_nll_weighted
+                    + comp_reconstruction_nll_weighted
+                    + live_to_target_l2_weightes
+                    + inv_latent_l2_weight
+                    + comp_latent_l2_weight
+                )
 
                 if config.wandb_enabled:
-                    wandb.log({
-                        "eval/total_loss": total_loss.item(),
-                        "eval/kl_loss": kl_losses.item(),
-                        "eval/kl_loss_weighted": kl_losses_weighted.item(),
-                        "eval/kl_weight": get_kl_weight(
-                            step,
-                            config.vae.kl_warmup_steps,
-                            config.vae.kl_warmup_start_weight,
-                            config.vae.kl_loss_weight,
-                        ),
-                        "eval/vae_reconstruction_nll": losses.vae_reconstruction_nll.item(),
-                        "eval/vae_reconstruction_nll_weighted": vae_reconstruction_nll_weighted.item(),
-                        "eval/inv_reconstruction_nll": losses.inv_reconstruction_nll.item(),
-                        "eval/inv_reconstruction_nll_weighted": inv_reconstruction_nll_weighted.item(),
-                        "eval/comp_reconstruction_nll": losses.comp_reconstruction_nll.item(),
-                        "eval/comp_reconstruction_nll_weighted": comp_reconstruction_nll_weighted.item(),
-                        "eval/live_to_target_l2": losses.live_to_target_l2.item(),
-                        "eval/live_to_target_l2_weighted": live_to_target_l2_weightes.item(),
-                        "eval/inv_latent_l2": losses.target_inv_l2.item(),
-                        "eval/inv_latent_l2_weighted": inv_latent_l2_weight.item(),
-                        "eval/comp_latent_l2": losses.target_comp_l2.item(),
-                        "eval/comp_latent_l2_weighted": comp_latent_l2_weight.item(),
-                        "eval/latent_weight": get_latent_weight(
-                            step,
-                            config.latent_warmup_delay_steps,
-                            config.latent_warmup_steps,
-                            config.latent_warmup_start_weight,
-                        ),
-                        "eval/ema_tau": get_ema_tau(
-                            step,
-                            config.ema_tau_warmup_steps,
-                            config.ema_tau_start,
-                            config.ema_tau_final,
-                        ),
-                    },
-                    step=step,
-                )
-            
+                    wandb.log(
+                        {
+                            "eval/total_loss": total_loss.item(),
+                            "eval/kl_loss": losses.kl_losses.item(),
+                            "eval/kl_loss_weighted": kl_weighted_loss.item(),
+                            "eval/kl_weight": get_kl_weight(
+                                step,
+                                config.vae.kl_warmup_steps,
+                                config.vae.kl_warmup_start_weight,
+                                config.vae.kl_loss_weight,
+                            ),
+                            "eval/vae_reconstruction_nll": losses.vae_reconstruction_nll.item(),
+                            "eval/vae_reconstruction_nll_weighted": vae_reconstruction_nll_weighted.item(),
+                            "eval/inv_reconstruction_nll": losses.inv_reconstruction_nll.item(),
+                            "eval/inv_reconstruction_nll_weighted": inv_reconstruction_nll_weighted.item(),
+                            "eval/comp_reconstruction_nll": losses.comp_reconstruction_nll.item(),
+                            "eval/comp_reconstruction_nll_weighted": comp_reconstruction_nll_weighted.item(),
+                            "eval/live_to_target_l2": losses.live_to_target_l2.item(),
+                            "eval/live_to_target_l2_weighted": live_to_target_l2_weightes.item(),
+                            "eval/inv_latent_l2": losses.target_inv_l2.item(),
+                            "eval/inv_latent_l2_weighted": inv_latent_l2_weight.item(),
+                            "eval/comp_latent_l2": losses.target_comp_l2.item(),
+                            "eval/comp_latent_l2_weighted": comp_latent_l2_weight.item(),
+                            "eval/latent_weight": get_latent_weight(
+                                step,
+                                config.latent_warmup_delay_steps,
+                                config.latent_warmup_steps,
+                                config.latent_warmup_start_weight,
+                            ),
+                            "eval/ema_tau": get_ema_tau(
+                                step,
+                                config.ema_tau_warmup_steps,
+                                config.ema_tau_start,
+                                config.ema_tau_final,
+                            ),
+                        },
+                        step=step,
+                    )
+
             logger.info(
                 f"[Eval step {step}] total={total_loss:.4f}, "
                 f"kl={losses.kl_losses.item():.4f}, "
@@ -230,7 +261,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # -------------------
         for model in learned_networks_tuple:
             model.train()
-        
+
         losses = training_loop_iteration(
             TrainingLoopInput(
                 learned_networks_tuple=learned_networks_tuple,
@@ -241,28 +272,62 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 dtype=dtype,
             )
         )
-        kl_weight = get_kl_weight(
-            step,
-            config.vae.kl_warmup_steps,
-            config.vae.kl_warmup_start_weight,
-            config.vae.kl_loss_weight,
+        kl_weight = torch.tensor(
+            get_kl_weight(
+                step,
+                config.vae.kl_warmup_steps,
+                config.vae.kl_warmup_start_weight,
+                config.vae.kl_loss_weight,
+            ),
+            device=device,
+            dtype=dtype,
         )
         kl_weighted_loss = losses.kl_losses * kl_weight
-        vae_reconstruction_nll_weighted = losses.vae_reconstruction_nll * config.reconstruction_loss_weight
-        inv_reconstruction_nll_weighted = losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
-        comp_reconstruction_nll_weighted = losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
-        latent_l2_losses_weight = get_latent_weight(
-            step,
-            config.latent_warmup_delay_steps,
-            config.latent_warmup_steps,
-            config.latent_warmup_start_weight,
+        vae_reconstruction_nll_weighted = (
+            losses.vae_reconstruction_nll * config.reconstruction_loss_weight
         )
-        live_to_target_l2_weightes = losses.live_to_target_l2 * config.latent_sampled_perm_loss_weight * latent_l2_losses_weight
-        inv_latent_l2_weight = losses.target_inv_l2 * config.latent_inv_perm_loss_weight * latent_l2_losses_weight
-        comp_latent_l2_weight = losses.target_comp_l2 * config.latent_comp_perm_loss_weight * latent_l2_losses_weight
-        total_loss = kl_weighted_loss + vae_reconstruction_nll_weighted + inv_reconstruction_nll_weighted + comp_reconstruction_nll_weighted + live_to_target_l2_weightes + inv_latent_l2_weight + comp_latent_l2_weight
+        inv_reconstruction_nll_weighted = (
+            losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
+        )
+        comp_reconstruction_nll_weighted = (
+            losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
+        )
+        latent_l2_losses_weight = torch.tensor(
+            get_latent_weight(
+                step,
+                config.latent_warmup_delay_steps,
+                config.latent_warmup_steps,
+                config.latent_warmup_start_weight,
+            ),
+            device=device,
+            dtype=dtype,
+        )
+        live_to_target_l2_weightes = (
+            losses.live_to_target_l2
+            * config.latent_sampled_perm_loss_weight
+            * latent_l2_losses_weight
+        )
+        inv_latent_l2_weight = (
+            losses.target_inv_l2
+            * config.latent_inv_perm_loss_weight
+            * latent_l2_losses_weight
+        )
+        comp_latent_l2_weight = (
+            losses.target_comp_l2
+            * config.latent_comp_perm_loss_weight
+            * latent_l2_losses_weight
+        )
+        total_loss = (
+            kl_weighted_loss
+            + vae_reconstruction_nll_weighted
+            + inv_reconstruction_nll_weighted
+            + comp_reconstruction_nll_weighted
+            + live_to_target_l2_weightes
+            + inv_latent_l2_weight
+            + comp_latent_l2_weight
+        )
 
-        total_loss.backward()
+        total_loss.backward()  # type: ignore
         optimizer.step()
         scheduler.step()
         optimizer.zero_grad()
@@ -297,33 +362,34 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         if step % config.log_interval == 0:
             if config.wandb_enabled:
-                wandb.log({
-                    "train/total_loss": total_loss.item(),
-                    "train/kl_loss": losses.kl_losses.item(),
-                    "train/kl_loss_weighted": kl_weighted_loss.item(),
-                    "train/vae_reconstruction_nll": losses.vae_reconstruction_nll.item(),
-                    "train/vae_reconstruction_nll_weighted": vae_reconstruction_nll_weighted.item(),
-                    "train/inv_reconstruction_nll": losses.inv_reconstruction_nll.item(),
-                    "train/inv_reconstruction_nll_weighted": inv_reconstruction_nll_weighted.item(),
-                    "train/comp_reconstruction_nll": losses.comp_reconstruction_nll.item(),
-                    "train/comp_reconstruction_nll_weighted": comp_reconstruction_nll_weighted.item(),
-                    "train/live_to_target_l2": losses.live_to_target_l2.item(),
-                    "train/live_to_target_l2_weighted": live_to_target_l2_weightes.item(),
-                    "train/inv_latent_l2": losses.target_inv_l2.item(),
-                    "train/inv_latent_l2_weighted": inv_latent_l2_weight.item(),
-                    "train/comp_latent_l2": losses.target_comp_l2.item(),
-                    "train/comp_latent_l2_weighted": comp_latent_l2_weight.item(),
-                    "train/latent_weight": latent_l2_losses_weight.item(),
-                    "train/kl_weight": kl_weight.item(),
-                    "train/ema_tau": get_ema_tau(
-                        step,
-                        config.ema_tau_warmup_steps,
-                        config.ema_tau_start,
-                        config.ema_tau_final,
-                    ),
-                    "train/lr": scheduler.get_last_lr()[0],
-                },
-                step=step,
+                wandb.log(
+                    {
+                        "train/total_loss": total_loss.item(),
+                        "train/kl_loss": losses.kl_losses.item(),
+                        "train/kl_loss_weighted": kl_weighted_loss.item(),
+                        "train/vae_reconstruction_nll": losses.vae_reconstruction_nll.item(),
+                        "train/vae_reconstruction_nll_weighted": vae_reconstruction_nll_weighted.item(),
+                        "train/inv_reconstruction_nll": losses.inv_reconstruction_nll.item(),
+                        "train/inv_reconstruction_nll_weighted": inv_reconstruction_nll_weighted.item(),
+                        "train/comp_reconstruction_nll": losses.comp_reconstruction_nll.item(),
+                        "train/comp_reconstruction_nll_weighted": comp_reconstruction_nll_weighted.item(),
+                        "train/live_to_target_l2": losses.live_to_target_l2.item(),
+                        "train/live_to_target_l2_weighted": live_to_target_l2_weightes.item(),
+                        "train/inv_latent_l2": losses.target_inv_l2.item(),
+                        "train/inv_latent_l2_weighted": inv_latent_l2_weight.item(),
+                        "train/comp_latent_l2": losses.target_comp_l2.item(),
+                        "train/comp_latent_l2_weighted": comp_latent_l2_weight.item(),
+                        "train/latent_weight": latent_l2_losses_weight.item(),
+                        "train/kl_weight": kl_weight.item(),
+                        "train/ema_tau": get_ema_tau(
+                            step,
+                            config.ema_tau_warmup_steps,
+                            config.ema_tau_start,
+                            config.ema_tau_final,
+                        ),
+                        "train/lr": scheduler.get_last_lr()[0],
+                    },
+                    step=step,
                 )
             logger.info(
                 f"[Train step {step}] total={total_loss:.4f}, "
@@ -338,24 +404,16 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
         # Log training losses
         if step % config.log_interval == 0:
-            current_lr = scheduler.get_last_lr()[0]
-            current_kl_weight = get_kl_weight(
-                step,
-                config.vae.kl_warmup_steps,
-                config.vae.kl_warmup_start_weight,
-                config.vae.kl_loss_weight,
-            )
-            current_latent_weight = get_latent_weight(
-                step,
-                config.latent_warmup_delay_steps,
-                config.latent_warmup_steps,
-                config.latent_warmup_start_weight,
-            )
-            current_ema_tau = get_ema_tau(
-                step,
-                config.ema_tau_warmup_steps,
-                config.ema_tau_start,
-                config.ema_tau_final,
+            # Log metrics to console - these variables are not needed
+            logger.info(
+                f"[Train step {step}] total={total_loss:.4f}, "
+                f"kl={losses.kl_losses.item():.4f}, "
+                f"vae_recon={losses.vae_reconstruction_nll.item():.4f}, "
+                f"inv_recon={losses.inv_reconstruction_nll.item():.4f}, "
+                f"comp_recon={losses.comp_reconstruction_nll.item():.4f}, "
+                f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
+                f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
+                f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
             )
 
     return 0

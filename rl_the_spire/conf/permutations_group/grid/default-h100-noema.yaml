@@ -8,12 +8,12 @@ encoder:
   n_embed: 256
   n_heads: 8
   n_layers: 8
-  attn_dropout: 0.0
-  resid_dropout: 0.0
+  encoder_attn_dropout: 0.0  # Encoder-specific dropout
+  encoder_resid_dropout: 0.0  # Encoder-specific dropout
   dtype: "float32"
   device: "cuda"
   init_std: 0.02
-  mlp_dropout: 0.0
+  encoder_mlp_dropout: 0.0  # Encoder-specific dropout
   ln_eps: 1e-5
   n_output_heads: 4
   n_output_embed: 64
@@ -41,6 +41,10 @@ inverter_network:
   n_layers: 4
 composer_network:
   n_layers: 6
+# General dropout parameters for other components
+attn_dropout: 0.0
+resid_dropout: 0.0
+mlp_dropout: 0.0
 num_live_to_target_adapter_layers: 2
 iterations: 100000
 eval_interval: 100
