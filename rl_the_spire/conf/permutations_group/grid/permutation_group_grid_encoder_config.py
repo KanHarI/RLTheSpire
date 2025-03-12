@@ -6,12 +6,12 @@ class PermutationGroupEncoderConfig:
     n_embed: int
     n_heads: int
     n_layers: int
-    attn_dropout: float
-    resid_dropout: float
+    encoder_attn_dropout: float
+    encoder_resid_dropout: float
     dtype: str
     device: str
     init_std: float
-    mlp_dropout: float
+    encoder_mlp_dropout: float
     ln_eps: float
     n_output_heads: int
     n_output_embed: int

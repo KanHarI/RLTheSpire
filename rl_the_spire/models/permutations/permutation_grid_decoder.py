@@ -3,6 +3,9 @@ from typing import Callable
 
 import torch
 
+from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
+    PositionalSequenceEncoder,
+)
 from rl_the_spire.models.transformers.conv_transformer_block import (
     ConvTransformerBlock,
     ConvTransformerBlockConfig,
@@ -18,7 +21,7 @@ from rl_the_spire.models.transformers.transformer_body import (
 
 
 @dataclasses.dataclass
-class PermutationDecoderConfig:
+class PermutationGridDecoderConfig:
     n_embed_grid: int
     n_embed_sequence: int
     n_grid_rows: int
@@ -38,8 +41,8 @@ class PermutationDecoderConfig:
     mlp_dropout: float
 
 
-class PermutationDecoder(torch.nn.Module):
-    def __init__(self, config: PermutationDecoderConfig):
+class PermutationGridDecoder(torch.nn.Module):
+    def __init__(self, config: PermutationGridDecoderConfig):
         super().__init__()
         self.config = config
 
@@ -119,10 +122,38 @@ class PermutationDecoder(torch.nn.Module):
         self.grid_to_sequence.init_weights()
         self.sequence_transformer.init_weights()
 
-    def forward(self, x: torch.Tensor, pos_encodings: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, pos_encoder: PositionalSequenceEncoder, x: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Forward pass of the PermutationDecoder.
+
+        Args:
+            pos_encoder: Positional sequence encoder to use for encoding position information
+            x: Tensor of shape (batch_size, n_grid_rows, n_grid_columns, n_embed_grid)
+
+        Returns:
+            Tensor of shape (batch_size, n_max_permutation_size, n_embed_sequence)
+        """
         x = self.grid_transformer(x)
-        # Broadcast pos_encoding from (L, E) to (B, L, E)
-        x = self.grid_to_sequence(
-            x, pos_encodings.unsqueeze(0).expand(x.shape[0], -1, -1)
+
+        # Create a dummy sequence tensor to apply positional encoding
+        batch_size = x.shape[0]
+        dummy_seq = torch.zeros(
+            (
+                batch_size,
+                self.config.n_max_permutation_size,
+                self.config.n_embed_sequence,
+            ),
+            device=x.device,
+            dtype=x.dtype,
         )
+
+        # Get positional encodings by applying the encoder to the dummy sequence
+        # This will extract just the positional component
+        pos_encodings = pos_encoder(dummy_seq) - dummy_seq
+
+        # Apply grid to sequence transformation with positional encodings
+        x = self.grid_to_sequence(x, pos_encodings)
+
         return self.sequence_transformer(x, extra_embed=torch.zeros_like(x[:, :, :0]))  # type: ignore

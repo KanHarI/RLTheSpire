@@ -2,7 +2,7 @@ import dataclasses
 
 
 @dataclasses.dataclass
-class PermutationGroupVAEConfig:
+class VAEConfig:
     gamma: float
     kl_loss_weight: float
     kl_warmup_steps: int

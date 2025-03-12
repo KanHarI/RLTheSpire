@@ -8,12 +8,12 @@ encoder:
   n_embed: 128
   n_heads: 4
   n_layers: 6
-  attn_dropout: 0.0
-  resid_dropout: 0.0
+  encoder_attn_dropout: 0.1
+  encoder_resid_dropout: 0.1
+  encoder_mlp_dropout: 0.1
   dtype: "float32"
   device: "cpu"
   init_std: 0.02
-  mlp_dropout: 0.0
   ln_eps: 1e-5
   n_output_heads: 2
   n_output_embed: 16
@@ -41,10 +41,14 @@ inverter_network:
   n_layers: 3
 composer_network:
   n_layers: 3
+# General dropout parameters for other components
+attn_dropout: 0.0
+resid_dropout: 0.0
+mlp_dropout: 0.0
 num_live_to_target_adapter_layers: 1
 iterations: 10000
 eval_interval: 100
-experiment_name: "permutations_group_cpu_default"
+experiment_name: "permutations_group_grid_vae_cpu_default"
 wandb_enabled: true
 log_interval: 20
 reconstruction_loss_weight: 1.0

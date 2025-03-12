@@ -8,12 +8,12 @@ encoder:
   n_embed: 256
   n_heads: 8
   n_layers: 8
-  attn_dropout: 0.0
-  resid_dropout: 0.0
+  encoder_attn_dropout: 0.1
+  encoder_resid_dropout: 0.1
+  encoder_mlp_dropout: 0.1
   dtype: "float32"
   device: "cuda"
   init_std: 0.02
-  mlp_dropout: 0.0
   ln_eps: 1e-5
   n_output_heads: 4
   n_output_embed: 64
@@ -25,14 +25,14 @@ encoder:
   conv_blocks: 2
 optimizer:
   lr: 1.0e-4
-  warmup_steps: 5000
+  warmup_steps: 2000
   beta1: 0.9
   beta2: 0.999
   weight_decay: 0.01
 vae:
   gamma: 0.5
-  kl_loss_weight: 0.001
-  kl_warmup_steps: 0
+  kl_loss_weight: 0.01
+  kl_warmup_steps: 20000
   kl_warmup_start_weight: 0.0
 conv_transformer:
   n_heads: 4
@@ -41,26 +41,30 @@ inverter_network:
   n_layers: 4
 composer_network:
   n_layers: 6
+# General dropout parameters for other components
+attn_dropout: 0.0
+resid_dropout: 0.0
+mlp_dropout: 0.0
 num_live_to_target_adapter_layers: 2
 iterations: 100000
 eval_interval: 100
-experiment_name: "permutations_group_h100_gpu"  # Updated experiment name
+experiment_name: "permutations_group_grid_vae_h100_gpu_no_ema"  # Updated experiment name
 wandb_enabled: true
 log_interval: 100
 reconstruction_loss_weight: 1.0
 neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
-latent_inv_perm_loss_weight: 1.00
-latent_comp_perm_loss_weight: 1.00
-latent_sampled_perm_loss_weight: 1.00
+latent_inv_perm_loss_weight: 0.01
+latent_comp_perm_loss_weight: 0.01
+latent_sampled_perm_loss_weight: 0.01
 # Latent loss warmup params
-latent_warmup_steps: 0
-latent_warmup_start_weight: 0.00
-latent_warmup_delay_steps: 0
-use_ema_target: true
-# EMA tau scheduling
-ema_tau_final: 0.005
-ema_tau_start: 0.5
-ema_tau_warmup_steps: 5000
-ema_tau: ${ema_tau_final}
+latent_warmup_steps: 5000
+latent_warmup_start_weight: 0.0
+latent_warmup_delay_steps: 2000
+use_ema_target: false
+# EMA tau scheduling (not used when use_ema_target is false)
+ema_tau_final: 0.005  # Final tau value
+ema_tau_start: 0.05   # Initial higher tau value
+ema_tau_warmup_steps: 10000  # Steps to decrease from start to final value
+ema_tau: ${ema_tau_final}  # Keeping for backward compatibility
 init_ema_target_as_zeros: false

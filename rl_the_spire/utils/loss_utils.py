@@ -1,3 +1,6 @@
+import torch
+
+
 def get_kl_weight(
     current_step: int,
     warmup_steps: int,
@@ -5,7 +8,7 @@ def get_kl_weight(
     target_weight: float,
 ) -> float:
     """
-    Calculate the KL divergence weight with linear warmup.
+    Calculate the KL divergence weight with cosine annealing warmup.
 
     Args:
         current_step: Current training step
@@ -16,10 +19,13 @@ def get_kl_weight(
     Returns:
         Current KL weight
     """
-    # Linear warmup of KL weight from start_weight to target weight
+    # Cosine annealing of KL weight from start_weight to target weight
     if current_step < warmup_steps:
-        alpha = float(current_step) / float(max(1, warmup_steps))
-        return warmup_start_weight + alpha * (target_weight - warmup_start_weight)
+        progress = float(current_step) / float(max(1, warmup_steps))
+        cosine_factor = 0.5 * (
+            1.0 + torch.cos(torch.tensor(torch.pi * (1 - progress))).item()
+        )
+        return target_weight + (warmup_start_weight - target_weight) * cosine_factor
     return target_weight
 
 
@@ -30,7 +36,7 @@ def get_latent_weight(
     warmup_start_weight: float = 0.0,
 ) -> float:
     """
-    Calculate the latent loss weight with a delay period followed by linear warmup.
+    Calculate the latent loss weight with a delay period followed by cosine annealing warmup.
 
     Args:
         current_step: Current training step
@@ -45,10 +51,13 @@ def get_latent_weight(
     if current_step < warmup_delay_steps:
         return 0.0
 
-    # Linear warmup of latent loss weights from start_weight to target weight
+    # Cosine annealing of latent loss weights from start_weight to target weight
     # after the delay period
     warmup_step = current_step - warmup_delay_steps
     if warmup_step < warmup_steps:
-        alpha = float(warmup_step) / float(max(1, warmup_steps))
-        return warmup_start_weight + alpha * (1.0 - warmup_start_weight)
+        progress = float(warmup_step) / float(max(1, warmup_steps))
+        cosine_factor = 0.5 * (
+            1.0 + torch.cos(torch.tensor(torch.pi * (1 - progress))).item()
+        )
+        return 1.0 - (1.0 - warmup_start_weight) * cosine_factor
     return 1.0

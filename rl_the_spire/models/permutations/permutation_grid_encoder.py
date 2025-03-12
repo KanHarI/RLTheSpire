@@ -7,6 +7,9 @@ from rl_the_spire.models.permutations.permutation_embedder import (
     PermutationEmbedder,
     PermutationEmbedderConfig,
 )
+from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
+    PositionalSequenceEncoder,
+)
 from rl_the_spire.models.transformers.attention_to_tensor import (
     AttentionToTensor,
     AttentionToTensorConfig,
@@ -22,7 +25,7 @@ from rl_the_spire.models.transformers.transformer_body import (
 
 
 @dataclasses.dataclass
-class PermutationEncoderConfig:
+class PermutationGridEncoderConfig:
     n_max_permutation_size: int
     n_embed: int
     n_heads: int
@@ -42,11 +45,11 @@ class PermutationEncoderConfig:
     activation: Callable[[torch.Tensor], torch.Tensor]
     linear_size_multiplier: int
     conv_transformer_blocks: int
-    sigma_output: bool = True
+    sigma_output: bool
 
 
-class PermutationEncoder(torch.nn.Module):
-    def __init__(self, config: PermutationEncoderConfig):
+class PermutationGridEncoder(torch.nn.Module):
+    def __init__(self, config: PermutationGridEncoderConfig):
         super().__init__()
         self.config = config
         embedder_config = PermutationEmbedderConfig(
@@ -117,37 +120,40 @@ class PermutationEncoder(torch.nn.Module):
         self.attention_to_tensor.init_weights()
         self.conv_transformer_body.init_weights()
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, pos_encoder: PositionalSequenceEncoder, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of PermutationEncoder.
 
         Args:
+            pos_encoder: Positional sequence encoder to use for encoding position information
             x: [batch_size, permutation_size] tensor of integers
 
         Returns:
             mus: [batch_size, n_output_rows, n_output_columns, n_output_embed] tensor of floats
             logvars: [batch_size, n_output_rows, n_output_columns, n_output_embed] tensor of floats
         """
-        x = self.embedder(x)
-        x = self.transformer_body(x, extra_embed=torch.zeros_like(x[:, :, :0]))
-        x = self.attention_to_tensor(x)
-        x = self.conv_transformer_body(x)
+        # First, use the embedder to convert the permutation indices to embeddings
+        embeds = self.embedder(pos_encoder, x)
+
+        # Pass through the transformer
+        transformer_out = self.transformer_body(
+            embeds, extra_embed=torch.zeros_like(embeds[:, :, :0])
+        )
+
+        # Convert to tensor
+        tensor_out = self.attention_to_tensor(transformer_out)
+
+        # shape: [batch_size, n_output_rows, n_output_columns, n_output_embed * (2 if sigma_output else 1)]
+
+        # Apply ConvTransformerBody
+        tensor_out = self.conv_transformer_body(tensor_out)
 
         if self.config.sigma_output:
-            # Turn into (batch_size, n_output_rows, n_output_columns, n_output_embed, 2)
-            # For mus, logvars
-            x = x.view(
-                x.shape[0],
-                x.shape[1],
-                x.shape[2],
-                x.shape[3] // 2,
-                2,
-            )
-            mus = x[:, :, :, :, 0]
-            logvars = x[:, :, :, :, 1]
+            n_embed = self.config.n_output_embed
+            mus = tensor_out[..., :n_embed]
+            logvars = tensor_out[..., n_embed:]
+            return mus, logvars
         else:
-            # When sigma_output is False, we just have mus and return ones for logvars
-            mus = x
-            logvars = torch.ones_like(mus)
-
-        return mus, logvars
+            return tensor_out, torch.ones_like(tensor_out)
