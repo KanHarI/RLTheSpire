@@ -17,7 +17,8 @@ def lr_lambda(current_step: int, warmup_steps: int) -> float:
     """
     # Cosine annealing warmup followed by constant learning rate
     if current_step < warmup_steps:
-        return 0.5 * (1 + math.cos(math.pi * (1 - current_step / warmup_steps)))
+        # return 0.5 * (1 + math.cos(math.pi * (1 - current_step / warmup_steps)))
+        return current_step / warmup_steps
     return 1.0
 
 
