@@ -51,13 +51,15 @@ def get_latent_weight(
     if current_step < warmup_delay_steps:
         return 0.0
 
-    # Cosine annealing of latent loss weights from start_weight to target weight
+    # Cosine annealing of latent loss weights from start_weight to target weight (1.0)
     # after the delay period
     warmup_step = current_step - warmup_delay_steps
     if warmup_step < warmup_steps:
         progress = float(warmup_step) / float(max(1, warmup_steps))
+        # We want a function that starts at warmup_start_weight and ends at 1.0
+        # Use simple cosine schedule from 0->1
         cosine_factor = 0.5 * (
-            1.0 + torch.cos(torch.tensor(torch.pi * (1 - progress))).item()
+            1.0 - torch.cos(torch.tensor(torch.pi * progress)).item()
         )
-        return warmup_start_weight + (1.0 - warmup_start_weight) * (1.0 - cosine_factor)
+        return warmup_start_weight + (1.0 - warmup_start_weight) * cosine_factor
     return 1.0
