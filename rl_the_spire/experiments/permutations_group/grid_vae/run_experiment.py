@@ -396,19 +396,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     },
                     step=step,
                 )
-            logger.info(
-                f"[Train step {step}] total={total_loss:.4f}, "
-                f"kl={losses.kl_losses.item():.4f}, "
-                f"vae_recon={losses.vae_reconstruction_nll.item():.4f}, "
-                f"inv_recon={losses.inv_reconstruction_nll.item():.4f}, "
-                f"comp_recon={losses.comp_reconstruction_nll.item():.4f}, "
-                f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
-                f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
-                f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
-            )
 
-        # Log training losses
-        if step % config.log_interval == 0:
             # Log metrics to console - these variables are not needed
             logger.info(
                 f"[Train step {step}] total={total_loss:.4f}, "
