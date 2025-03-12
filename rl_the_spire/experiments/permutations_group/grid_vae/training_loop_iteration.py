@@ -156,7 +156,7 @@ def training_loop_iteration(
     live_to_target_l2 = torch.norm(
         live_to_target_adapter(positional_grid_encoder(all_samples)) - all_target_mus,
         p=2,
-        dim=2,
+        dim=(2, 3),
     ).mean()
 
     # Decode from latent space (VAE)
@@ -193,12 +193,12 @@ def training_loop_iteration(
     target_inv_l2 = torch.norm(
         live_to_target_adapter(positional_grid_encoder(neural_inv_perm)) - te_inv_mus,
         p=2,
-        dim=1,
+        dim=(1, 2),
     ).mean()
     target_comp_l2 = torch.norm(
         live_to_target_adapter(positional_grid_encoder(neural_comp_perm)) - te_r_mus,
         p=2,
-        dim=1,
+        dim=(1, 2),
     ).mean()
 
     # Reconstruction loss after neural group operations

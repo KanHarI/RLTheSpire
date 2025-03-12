@@ -416,6 +416,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
                 f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
                 f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
+                f"lr={scheduler.get_last_lr()[0]:.6f}",
             )
 
     return 0
