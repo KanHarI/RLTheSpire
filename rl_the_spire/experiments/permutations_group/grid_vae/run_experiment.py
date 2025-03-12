@@ -1,3 +1,6 @@
+# isort: skip_file
+# Skipping isort as for some unknown reason mac and linux disagree on the order of imports
+
 import logging
 from typing import Any
 
