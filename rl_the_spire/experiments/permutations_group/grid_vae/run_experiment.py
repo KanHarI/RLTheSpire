@@ -133,7 +133,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         # 6. Initialize Weights & Biases
         logger.info("Initializing WanDB...")
         wandb.init(
-            project="rl_the_spire.permutations_group", name=config.experiment_name
+            project="rl_the_spire.permutations_group.grid_vae", name=config.experiment_name
         )
         wandb.config.update(config)  # type: ignore
 
