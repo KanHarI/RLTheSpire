@@ -31,7 +31,7 @@ optimizer:
   weight_decay: 0.01
 vae:
   kl_loss_weight: 0.001
-  kl_warmup_steps: 0
+  kl_warmup_steps: 10000
   kl_warmup_start_weight: 0.0
   # Gamma parameters
   gamma_warmup_steps: 5000
