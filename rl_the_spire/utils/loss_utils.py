@@ -25,7 +25,9 @@ def get_kl_weight(
         cosine_factor = 0.5 * (
             1.0 - torch.cos(torch.tensor(torch.pi * progress)).item()
         )
-        return warmup_start_weight + (target_weight - warmup_start_weight) * cosine_factor
+        return (
+            warmup_start_weight + (target_weight - warmup_start_weight) * cosine_factor
+        )
     return target_weight
 
 

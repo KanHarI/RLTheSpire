@@ -186,11 +186,20 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 vae_reconstruction_nll_weighted = (
                     losses.vae_reconstruction_nll * config.reconstruction_loss_weight
                 )
+                group_operations_weight_mult = (
+                    1
+                    if step > config.group_operations_warmup_steps
+                    else step / config.group_operations_warmup_steps
+                )
                 inv_reconstruction_nll_weighted = (
-                    losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
+                    losses.inv_reconstruction_nll
+                    * config.neural_inv_perm_loss_weight
+                    * group_operations_weight_mult
                 )
                 comp_reconstruction_nll_weighted = (
-                    losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
+                    losses.comp_reconstruction_nll
+                    * config.neural_comp_perm_loss_weight
+                    * group_operations_weight_mult
                 )
                 latent_l2_losses_weight = torch.tensor(
                     get_latent_weight(
@@ -211,11 +220,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     losses.target_inv_l2
                     * config.latent_inv_perm_loss_weight
                     * latent_l2_losses_weight
+                    * group_operations_weight_mult
                 )
                 comp_latent_l2_weight = (
                     losses.target_comp_l2
                     * config.latent_comp_perm_loss_weight
                     * latent_l2_losses_weight
+                    * group_operations_weight_mult
                 )
                 total_loss = (
                     kl_weighted_loss
@@ -319,11 +330,20 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         vae_reconstruction_nll_weighted = (
             losses.vae_reconstruction_nll * config.reconstruction_loss_weight
         )
+        group_operations_weight_mult = (
+            1
+            if step > config.group_operations_warmup_steps
+            else step / config.group_operations_warmup_steps
+        )
         inv_reconstruction_nll_weighted = (
-            losses.inv_reconstruction_nll * config.neural_inv_perm_loss_weight
+            losses.inv_reconstruction_nll
+            * config.neural_inv_perm_loss_weight
+            * group_operations_weight_mult
         )
         comp_reconstruction_nll_weighted = (
-            losses.comp_reconstruction_nll * config.neural_comp_perm_loss_weight
+            losses.comp_reconstruction_nll
+            * config.neural_comp_perm_loss_weight
+            * group_operations_weight_mult
         )
         latent_l2_losses_weight = torch.tensor(
             get_latent_weight(
@@ -344,11 +364,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             losses.target_inv_l2
             * config.latent_inv_perm_loss_weight
             * latent_l2_losses_weight
+            * group_operations_weight_mult
         )
         comp_latent_l2_weight = (
             losses.target_comp_l2
             * config.latent_comp_perm_loss_weight
             * latent_l2_losses_weight
+            * group_operations_weight_mult
         )
         total_loss = (
             kl_weighted_loss

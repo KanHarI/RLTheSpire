@@ -51,6 +51,7 @@ class PermutationGroupGridExperimentConfig:
     latent_warmup_steps: int
     latent_warmup_start_weight: float
     latent_warmup_delay_steps: int
+    group_operations_warmup_steps: int
     use_ema_target: bool
     ema_tau: float
     # EMA tau scheduling parameters
