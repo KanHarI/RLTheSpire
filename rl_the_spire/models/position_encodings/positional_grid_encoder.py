@@ -38,13 +38,21 @@ class PositionalGridEncoder(torch.nn.Module):
         # Create learnable row and column embeddings
         self.row_embeddings = torch.nn.Parameter(
             torch.zeros(
-                config.n_rows, config.n_embed, device=config.device, dtype=config.dtype
-            )
+                config.n_rows,
+                config.n_embed,
+                device=config.device,
+                dtype=config.dtype,
+            ),
+            requires_grad=True,
         )
         self.col_embeddings = torch.nn.Parameter(
             torch.zeros(
-                config.n_cols, config.n_embed, device=config.device, dtype=config.dtype
-            )
+                config.n_cols,
+                config.n_embed,
+                device=config.device,
+                dtype=config.dtype,
+            ),
+            requires_grad=True,
         )
 
     def init_weights(self) -> None:

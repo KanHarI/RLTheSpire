@@ -77,24 +77,24 @@ class GridToSequence(torch.nn.Module):
                 (config.grid_n_embed, config.seq_n_embed * 2),
                 dtype=config.dtype,
                 device=config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.grid_to_kv_proj_bias = torch.nn.Parameter(
             torch.zeros(
                 (config.seq_n_embed * 2,),
                 dtype=config.dtype,
                 device=config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.c_proj = torch.nn.Parameter(
             torch.zeros(
                 (config.seq_n_embed, config.seq_n_embed),
                 dtype=config.dtype,
                 device=config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.attn_dropout = torch.nn.Dropout(config.attn_dropout)
         self.resid_dropout = torch.nn.Dropout(config.resid_dropout)

@@ -30,24 +30,24 @@ class MultiHeadedAttention(torch.nn.Module):
                 (config.n_embed_in, 3 * config.n_embed_kqv),
                 dtype=config.dtype,
                 device=config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.c_attn_bias = torch.nn.Parameter(
             torch.zeros(
                 (3 * config.n_embed_kqv,),
                 dtype=config.dtype,
                 device=config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.c_proj = torch.nn.Parameter(
             torch.zeros(
                 (config.n_embed_kqv, config.n_embed_out),
                 dtype=config.dtype,
                 device=config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.attn_dropout = torch.nn.Dropout(config.attn_dropout)
         self.resid_dropout = torch.nn.Dropout(config.resid_dropout)

@@ -37,16 +37,16 @@ class AttentionToVec(torch.nn.Module):
                 (self.config.n_embed, self.config.n_output_dim * 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.transformer_to_kv_bias = torch.nn.Parameter(
             torch.zeros(
                 (self.config.n_output_dim * 2,),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.query = torch.nn.Parameter(
             torch.zeros(
@@ -56,8 +56,8 @@ class AttentionToVec(torch.nn.Module):
                 ),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.mlp_config = MLPConfig(
             n_in=self.config.n_output_dim,

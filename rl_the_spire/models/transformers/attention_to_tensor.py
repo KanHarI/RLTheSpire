@@ -70,16 +70,16 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_embed, self.config.n_output_embed * 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         self.transformer_to_kv_bias = nn.Parameter(
             torch.zeros(
                 (self.config.n_output_embed * 2,),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         # Learn two query tensors.
         # row_query: (n_output_rows, n_output_embed // 2)
@@ -88,8 +88,8 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_output_rows, self.config.n_output_embed // 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         # col_query: (n_output_columns, n_output_embed // 2)
         self.col_query = nn.Parameter(
@@ -97,8 +97,8 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_output_columns, self.config.n_output_embed // 2),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         # Learned linear projection to map the concatenated query to the proper query space.
         self.query_projection = nn.Parameter(
@@ -106,8 +106,8 @@ class AttentionToTensor(nn.Module):
                 (self.config.n_output_embed, self.config.n_output_embed),
                 dtype=self.config.dtype,
                 device=self.config.device,
-                requires_grad=True,
-            )
+            ),
+            requires_grad=True,
         )
         # MLP for post-processing the aggregated grid.
         self.mlp_config = MLPConfig(
