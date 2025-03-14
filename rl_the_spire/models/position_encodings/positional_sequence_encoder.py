@@ -39,7 +39,8 @@ class PositionalSequenceEncoder(torch.nn.Module):
                 config.n_embed,
                 device=config.device,
                 dtype=config.dtype,
-            )
+            ),
+            requires_grad=True,
         )
 
     def init_weights(self) -> None:
