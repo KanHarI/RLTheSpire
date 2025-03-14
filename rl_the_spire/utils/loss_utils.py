@@ -23,9 +23,9 @@ def get_kl_weight(
     if current_step < warmup_steps:
         progress = float(current_step) / float(max(1, warmup_steps))
         cosine_factor = 0.5 * (
-            1.0 + torch.cos(torch.tensor(torch.pi * (1 - progress))).item()
+            1.0 - torch.cos(torch.tensor(torch.pi * progress)).item()
         )
-        return target_weight + (warmup_start_weight - target_weight) * cosine_factor
+        return warmup_start_weight + (target_weight - warmup_start_weight) * cosine_factor
     return target_weight
 
 
