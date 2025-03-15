@@ -3,9 +3,6 @@ from typing import Callable
 
 import torch
 
-from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
-    PositionalSequenceEncoder,
-)
 from rl_the_spire.models.transformers.conv_transformer_block import (
     ConvTransformerBlock,
     ConvTransformerBlockConfig,
@@ -122,9 +119,10 @@ class PermutationDecoder(torch.nn.Module):
         self.grid_to_sequence.init_weights()
         self.sequence_transformer.init_weights()
 
-    def forward(
-        self, pos_encoder: PositionalSequenceEncoder, x: torch.Tensor
-    ) -> torch.Tensor:
+    # def forward(
+    #     self, pos_encoder: PositionalSequenceEncoder, x: torch.Tensor
+    # ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, pos_encodings: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the PermutationDecoder.
 
@@ -136,24 +134,6 @@ class PermutationDecoder(torch.nn.Module):
             Tensor of shape (batch_size, n_max_permutation_size, n_embed_sequence)
         """
         x = self.grid_transformer(x)
-
-        # Create a dummy sequence tensor to apply positional encoding
-        batch_size = x.shape[0]
-        dummy_seq = torch.zeros(
-            (
-                batch_size,
-                self.config.n_max_permutation_size,
-                self.config.n_embed_sequence,
-            ),
-            device=x.device,
-            dtype=x.dtype,
-        )
-
-        # Get positional encodings by applying the encoder to the dummy sequence
-        # This will extract just the positional component
-        pos_encodings = pos_encoder(dummy_seq) - dummy_seq
-
         # Apply grid to sequence transformation with positional encodings
         x = self.grid_to_sequence(x, pos_encodings)
-
         return self.sequence_transformer(x, extra_embed=torch.zeros_like(x[:, :, :0]))  # type: ignore

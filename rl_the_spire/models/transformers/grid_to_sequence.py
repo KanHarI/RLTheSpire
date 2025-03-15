@@ -125,7 +125,8 @@ class GridToSequence(torch.nn.Module):
         k, v = x.split(self.config.seq_n_embed, dim=-1)  # type: ignore
         q = pos_encodings + self.sequence_to_q_mlp(pos_encodings)
 
-        q = q.reshape(*B, L, self.config.n_heads, self.head_size).transpose(1, 2)
+        # q: (L, Embed)
+        q = q.reshape(L, self.config.n_heads, self.head_size).transpose(0, 1)
         k = k.reshape(*B, R * C, self.config.n_heads, self.head_size).transpose(1, 2)
         v = v.reshape(*B, R * C, self.config.n_heads, self.head_size).transpose(1, 2)
 

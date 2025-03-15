@@ -7,9 +7,6 @@ from rl_the_spire.models.permutations.permutation_embedder import (
     PermutationEmbedder,
     PermutationEmbedderConfig,
 )
-from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
-    PositionalSequenceEncoder,
-)
 from rl_the_spire.models.transformers.attention_to_tensor import (
     AttentionToTensor,
     AttentionToTensorConfig,
@@ -120,9 +117,7 @@ class PermutationGridEncoder(torch.nn.Module):
         self.attention_to_tensor.init_weights()
         self.conv_transformer_body.init_weights()
 
-    def forward(
-        self, pos_encoder: PositionalSequenceEncoder, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of PermutationEncoder.
 
@@ -135,7 +130,7 @@ class PermutationGridEncoder(torch.nn.Module):
             logvars: [batch_size, n_output_rows, n_output_columns, n_output_embed] tensor of floats
         """
         # First, use the embedder to convert the permutation indices to embeddings
-        embeds = self.embedder(pos_encoder, x)
+        embeds = self.embedder(x)
 
         # Pass through the transformer
         transformer_out = self.transformer_body(
