@@ -78,13 +78,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     ) = learned_networks_tuple
 
     # Create EMA target models if enabled
-    target_encoder, target_positional_encoder = create_target_models(
-        config, device, permutation_encoder, positional_seq_encoder
+    target_networks_tuple = create_target_models(
+        config,
+        device,
+        permutation_encoder,
+        positional_seq_encoder,
+        denoiser_network,
+        positional_grid_encoder,
     )
-    if target_encoder is None:
-        target_encoder = permutation_encoder
-    if target_positional_encoder is None:
-        target_positional_encoder = positional_seq_encoder
 
     params_for_optimizer = [
         param for model in learned_networks_tuple for param in model.parameters()
@@ -162,10 +163,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 losses = training_loop_iteration(
                     TrainingLoopInput(
                         learned_networks_tuple=learned_networks_tuple,
-                        target_networks_tuple=(
-                            target_encoder,
-                            target_positional_encoder,
-                        ),
+                        target_networks_tuple=target_networks_tuple,
                         dataloaders=(inversions_dataloader, composition_dataloader),
                         vae_gamma=current_gamma,
                         device=device,
@@ -309,7 +307,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         losses = training_loop_iteration(
             TrainingLoopInput(
                 learned_networks_tuple=learned_networks_tuple,
-                target_networks_tuple=(target_encoder, target_positional_encoder),
+                target_networks_tuple=target_networks_tuple,
                 dataloaders=(inversions_dataloader, composition_dataloader),
                 vae_gamma=current_gamma,
                 device=device,
@@ -388,14 +386,10 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         optimizer.zero_grad()
 
         # Update target network with EMA if enabled
-        if (
-            config.use_ema_target
-            and target_encoder is not None
-            and target_positional_encoder is not None
-        ):
+        if config.use_ema_target:
             ema_update(
                 permutation_encoder,
-                target_encoder,
+                target_networks_tuple[0],
                 get_ema_tau(
                     step,
                     config.ema_tau_warmup_steps,
@@ -406,7 +400,29 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
             ema_update(
                 positional_seq_encoder,
-                target_positional_encoder,
+                target_networks_tuple[1],
+                get_ema_tau(
+                    step,
+                    config.ema_tau_warmup_steps,
+                    config.ema_tau_start,
+                    config.ema_tau_final,
+                ),
+            )
+
+            ema_update(
+                denoiser_network,
+                target_networks_tuple[2],
+                get_ema_tau(
+                    step,
+                    config.ema_tau_warmup_steps,
+                    config.ema_tau_start,
+                    config.ema_tau_final,
+                ),
+            )
+
+            ema_update(
+                positional_grid_encoder,
+                target_networks_tuple[3],
                 get_ema_tau(
                     step,
                     config.ema_tau_warmup_steps,

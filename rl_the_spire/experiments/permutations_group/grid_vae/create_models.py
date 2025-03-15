@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import Optional, Tuple
+from typing import Tuple
 
 import torch
 
@@ -41,7 +41,14 @@ def create_target_models(
     device: torch.device,
     permutation_encoder: PermutationGridEncoder,
     positional_seq_encoder: PositionalSequenceEncoder,
-) -> Tuple[Optional[PermutationGridEncoder], Optional[PositionalSequenceEncoder]]:
+    denoiser_network: ConvTransformerBody,
+    positional_grid_encoder: PositionalGridEncoder,
+) -> Tuple[
+    PermutationGridEncoder,
+    PositionalSequenceEncoder,
+    ConvTransformerBody,
+    PositionalGridEncoder,
+]:
     """
     Create target models for EMA updates.
 
@@ -50,14 +57,23 @@ def create_target_models(
         device: The device to create the models on
         permutation_encoder: The source permutation encoder to copy
         positional_seq_encoder: The source positional sequence encoder to copy
+        denoiser_network: The source denoiser network to copy
+        positional_grid_encoder: The source positional grid encoder to copy
 
     Returns:
         Tuple containing:
         - target_encoder: EMA target encoder (None if not using EMA targets)
         - target_positional_encoder: EMA target positional encoder (None if not using EMA targets)
+        - target_denoiser_network: EMA target denoiser network (None if not using EMA targets)
+        - target_positional_grid_encoder: EMA target positional grid encoder (None if not using EMA targets)
     """
     if not config.use_ema_target:
-        return None, None
+        return (
+            permutation_encoder,
+            positional_seq_encoder,
+            denoiser_network,
+            positional_grid_encoder,
+        )
 
     logger.info("Initializing EMA target encoder")
     target_encoder = copy.deepcopy(permutation_encoder)
@@ -66,6 +82,14 @@ def create_target_models(
     logger.info("Initializing EMA target positional encoder")
     target_positional_encoder = copy.deepcopy(positional_seq_encoder)
     target_positional_encoder.to(device)
+
+    logger.info("Initializing EMA target denoiser network")
+    target_denoiser_network = copy.deepcopy(denoiser_network)
+    target_denoiser_network.to(device)
+
+    logger.info("Initializing EMA target positional grid encoder")
+    target_positional_grid_encoder = copy.deepcopy(positional_grid_encoder)
+    target_positional_grid_encoder.to(device)
 
     # Initialize parameters to zeros if specified
     if config.init_ema_target_as_zeros:
@@ -77,13 +101,27 @@ def create_target_models(
         for param in target_positional_encoder.parameters():
             param.data.zero_()
 
+        logger.info("Setting EMA target denoiser network parameters to zeros")
+        for param in target_denoiser_network.parameters():
+            param.data.zero_()
+
+        logger.info("Setting EMA target positional grid encoder parameters to zeros")
+        for param in target_positional_grid_encoder.parameters():
+            param.data.zero_()
+
     # We use torch.no_grad() when needed; We do want these dropout layers active
     # target_encoder.eval()
     # target_positional_encoder.eval()
     target_encoder.train()
     target_positional_encoder.train()
-
-    return target_encoder, target_positional_encoder
+    target_denoiser_network.train()
+    target_positional_grid_encoder.train()
+    return (
+        target_encoder,
+        target_positional_encoder,
+        target_denoiser_network,
+        target_positional_grid_encoder,
+    )
 
 
 def create_models(
