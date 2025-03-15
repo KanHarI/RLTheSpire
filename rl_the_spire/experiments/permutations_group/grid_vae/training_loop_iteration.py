@@ -51,6 +51,7 @@ class TrainingLoopInput:
 @dataclasses.dataclass
 class TrainingLoopIterationOutput:
     kl_losses: torch.Tensor
+    encoder_consistency_loss: torch.Tensor
     vae_reconstruction_nll: torch.Tensor
     inv_reconstruction_nll: torch.Tensor
     comp_reconstruction_nll: torch.Tensor
@@ -101,6 +102,12 @@ def training_loop_iteration(
     ep_p_mus, ep_p_logvars = permutation_encoder(positional_seq_encoder, p)
     ep_q_mus, ep_q_logvars = permutation_encoder(positional_seq_encoder, q)
     ep_r_mus, ep_r_logvars = permutation_encoder(positional_seq_encoder, r)
+
+    ep_r_mus_2, ep_r_logvars_2 = permutation_encoder(positional_seq_encoder, r)
+    ep_inv_mus_2, ep_inv_logvars_2 = permutation_encoder(positional_seq_encoder, inv)
+    ep_p_mus_2, ep_p_logvars_2 = permutation_encoder(positional_seq_encoder, p)
+    ep_q_mus_2, ep_q_logvars_2 = permutation_encoder(positional_seq_encoder, q)
+    ep_perm_mus_2, ep_perm_logvars_2 = permutation_encoder(positional_seq_encoder, perm)
 
     # Calculate encoder KL losses
     kl_losses = torch.tensor(0.0, device=tl_input.device, dtype=tl_input.dtype)
@@ -184,6 +191,40 @@ def training_loop_iteration(
         )
     )
 
+    sampled_perm_2 = denoiser_network(
+        positional_grid_encoder(
+            gamma_vae_sample(ep_perm_mus_2, ep_perm_logvars_2, tl_input.vae_gamma, 1)
+        )
+    )
+    sampled_inv_2 = denoiser_network(
+        positional_grid_encoder(
+            gamma_vae_sample(ep_inv_mus_2, ep_inv_logvars_2, tl_input.vae_gamma, 1)
+        )
+    )
+    sampled_p_2 = denoiser_network(
+        positional_grid_encoder(
+            gamma_vae_sample(ep_p_mus_2, ep_p_logvars_2, tl_input.vae_gamma, 1)
+        )
+    )
+    sampled_q_2 = denoiser_network(
+        positional_grid_encoder(
+            gamma_vae_sample(ep_q_mus_2, ep_q_logvars_2, tl_input.vae_gamma, 1)
+        )
+    )
+    sampled_r_2 = denoiser_network(
+        positional_grid_encoder(
+            gamma_vae_sample(ep_r_mus_2, ep_r_logvars_2, tl_input.vae_gamma, 1)
+        )
+    )
+
+    all_samples_1 = torch.stack(
+        [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r]
+    )
+    all_samples_2 = torch.stack(
+        [sampled_perm_2, sampled_inv_2, sampled_p_2, sampled_q_2, sampled_r_2]
+    )
+    consistency_loss = torch.norm(all_samples_1 - all_samples_2, p=2, dim=(2, 3)).mean()
+
     # Calculate live to target L2 losses
     live_to_target_l2 = torch.tensor(0.0, device=tl_input.device, dtype=tl_input.dtype)
 
@@ -252,6 +293,7 @@ def training_loop_iteration(
         vae_reconstruction_nll=vae_reconstruction_nll,
         inv_reconstruction_nll=inv_reconstruction_nll,
         comp_reconstruction_nll=comp_reconstruction_nll,
+        encoder_consistency_loss=consistency_loss,
         live_to_target_l2=live_to_target_l2,
         target_inv_l2=target_inv_l2,
         target_comp_l2=target_comp_l2,

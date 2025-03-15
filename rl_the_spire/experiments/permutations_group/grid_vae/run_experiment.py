@@ -234,6 +234,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     * latent_l2_losses_weight
                     * group_operations_weight_mult
                 )
+                consistency_loss_weight = torch.tensor(
+                    config.consistency_loss_weight,
+                    device=device,
+                    dtype=dtype,
+                )
+                encoder_consistency_loss_weighted = (
+                    losses.encoder_consistency_loss * consistency_loss_weight
+                )
                 total_loss = (
                     kl_weighted_loss
                     + vae_reconstruction_nll_weighted
@@ -242,6 +250,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     + live_to_target_l2_weightes
                     + inv_latent_l2_weight
                     + comp_latent_l2_weight
+                    + encoder_consistency_loss_weighted
                 )
 
                 if config.wandb_enabled:
@@ -276,6 +285,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                             ),
                             "eval/ema_tau": current_ema_tau,
                             "eval/vae_gamma": current_gamma,
+                            "eval/encoder_consistency_loss": losses.encoder_consistency_loss.item(),
+                            "eval/encoder_consistency_loss_weighted": encoder_consistency_loss_weighted.item(),
+                            "eval/group_operations_weight_mult": group_operations_weight_mult,
                         },
                         step=step,
                     )
@@ -289,7 +301,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"live_to_target_l2={losses.live_to_target_l2.item():.4f}, "
                 f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
                 f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
-                f"gamma={current_gamma:.4f}"
+                f"gamma={current_gamma:.4f}, "
+                f"encoder_consistency_loss={losses.encoder_consistency_loss.item():.4f}, "
             )
 
         # -------------------
@@ -373,6 +386,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             * latent_l2_losses_weight
             * group_operations_weight_mult
         )
+        consistency_loss_weight = torch.tensor(
+            config.consistency_loss_weight,
+            device=device,
+            dtype=dtype,
+        )
+        encoder_consistency_loss_weighted = (
+            losses.encoder_consistency_loss * consistency_loss_weight
+        )
         total_loss = (
             kl_weighted_loss
             + vae_reconstruction_nll_weighted
@@ -381,6 +402,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             + live_to_target_l2_weightes
             + inv_latent_l2_weight
             + comp_latent_l2_weight
+            + encoder_consistency_loss_weighted
         )
 
         total_loss.backward()  # type: ignore
@@ -434,6 +456,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/ema_tau": current_ema_tau,
                         "train/lr": scheduler.get_last_lr()[0],
                         "train/vae_gamma": current_gamma,
+                        "train/encoder_consistency_loss": losses.encoder_consistency_loss.item(),
+                        "train/encoder_consistency_loss_weighted": encoder_consistency_loss_weighted.item(),
+                        "train/group_operations_weight_mult": group_operations_weight_mult,
                     },
                     step=step,
                 )
@@ -449,7 +474,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 f"inv_latent_l2={losses.target_inv_l2.item():.4f}, "
                 f"comp_latent_l2={losses.target_comp_l2.item():.4f}, "
                 f"lr={scheduler.get_last_lr()[0]:.6f}, "
-                f"gamma={current_gamma:.4f}"
+                f"gamma={current_gamma:.4f}, "
+                f"encoder_consistency_loss={losses.encoder_consistency_loss.item():.4f}, "
             )
 
     return 0
