@@ -160,6 +160,14 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                     config.vae.gamma_final,
                 )
 
+                # Calculate ema_tau once for evaluation
+                current_ema_tau = get_ema_tau(
+                    step,
+                    config.ema_tau_warmup_steps,
+                    config.ema_tau_start,
+                    config.ema_tau_final,
+                )
+
                 losses = training_loop_iteration(
                     TrainingLoopInput(
                         learned_networks_tuple=learned_networks_tuple,
@@ -266,12 +274,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                                 config.latent_warmup_steps,
                                 config.latent_warmup_start_weight,
                             ),
-                            "eval/ema_tau": get_ema_tau(
-                                step,
-                                config.ema_tau_warmup_steps,
-                                config.ema_tau_start,
-                                config.ema_tau_final,
-                            ),
+                            "eval/ema_tau": current_ema_tau,
                             "eval/vae_gamma": current_gamma,
                         },
                         step=step,
@@ -385,51 +388,27 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         scheduler.step()
         optimizer.zero_grad()
 
+        # Calculate ema_tau once instead of repeatedly
+        current_ema_tau = get_ema_tau(
+            step,
+            config.ema_tau_warmup_steps,
+            config.ema_tau_start,
+            config.ema_tau_final,
+        )
+
         # Update target network with EMA if enabled
         if config.use_ema_target:
-            ema_update(
-                permutation_encoder,
-                target_networks_tuple[0],
-                get_ema_tau(
-                    step,
-                    config.ema_tau_warmup_steps,
-                    config.ema_tau_start,
-                    config.ema_tau_final,
-                ),
-            )
+            # Define source and target networks pairs
+            source_target_pairs = [
+                (permutation_encoder, target_networks_tuple[0]),
+                (positional_seq_encoder, target_networks_tuple[1]),
+                (denoiser_network, target_networks_tuple[2]),
+                (positional_grid_encoder, target_networks_tuple[3]),
+            ]
 
-            ema_update(
-                positional_seq_encoder,
-                target_networks_tuple[1],
-                get_ema_tau(
-                    step,
-                    config.ema_tau_warmup_steps,
-                    config.ema_tau_start,
-                    config.ema_tau_final,
-                ),
-            )
-
-            ema_update(
-                denoiser_network,
-                target_networks_tuple[2],
-                get_ema_tau(
-                    step,
-                    config.ema_tau_warmup_steps,
-                    config.ema_tau_start,
-                    config.ema_tau_final,
-                ),
-            )
-
-            ema_update(
-                positional_grid_encoder,
-                target_networks_tuple[3],
-                get_ema_tau(
-                    step,
-                    config.ema_tau_warmup_steps,
-                    config.ema_tau_start,
-                    config.ema_tau_final,
-                ),
-            )
+            # Update all target networks with the same tau value
+            for source_net, target_net in source_target_pairs:
+                ema_update(source_net, target_net, current_ema_tau)
 
         if step % config.log_interval == 0:
             if config.wandb_enabled:
@@ -452,12 +431,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                         "train/comp_latent_l2_weighted": comp_latent_l2_weight.item(),
                         "train/latent_weight": latent_l2_losses_weight.item(),
                         "train/kl_weight": kl_weight.item(),
-                        "train/ema_tau": get_ema_tau(
-                            step,
-                            config.ema_tau_warmup_steps,
-                            config.ema_tau_start,
-                            config.ema_tau_final,
-                        ),
+                        "train/ema_tau": current_ema_tau,
                         "train/lr": scheduler.get_last_lr()[0],
                         "train/vae_gamma": current_gamma,
                     },
