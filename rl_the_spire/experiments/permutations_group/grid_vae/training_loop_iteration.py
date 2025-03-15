@@ -229,12 +229,12 @@ def training_loop_iteration(
 
     # Construct l2 loss to target network inv, r
     target_inv_l2 = torch.norm(
-        live_to_target_adapter(positional_grid_encoder(neural_inv_perm)) - te_inv_mus,
+        live_to_target_adapter(positional_grid_encoder(neural_inv_perm)) - target_inv,
         p=2,
         dim=(1, 2),
     ).mean()
     target_comp_l2 = torch.norm(
-        live_to_target_adapter(positional_grid_encoder(neural_comp_perm)) - te_r_mus,
+        live_to_target_adapter(positional_grid_encoder(neural_comp_perm)) - target_r,
         p=2,
         dim=(1, 2),
     ).mean()
