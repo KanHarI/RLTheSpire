@@ -2,6 +2,10 @@ import dataclasses
 
 import torch
 
+from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
+    PositionalSequenceEncoder,
+)
+
 
 @dataclasses.dataclass
 class DirectProbabilityDistributionEmbedderConfig:
@@ -24,20 +28,15 @@ class DirectProbabilityDistributionEmbedder(torch.nn.Module):
             ),
             requires_grad=True,
         )
-        self.positional_embeddings = torch.nn.Parameter(
-            torch.zeros(
-                self.config.n_symbols + 1,
-                self.config.n_embed,
-            ),
-            requires_grad=True,
-        )
 
     def init_weights(self) -> None:
         torch.nn.init.normal_(self.symbol_embeddings, 0.0, self.config.init_std)
-        torch.nn.init.normal_(self.positional_embeddings, 0.0, self.config.init_std)
 
     def forward(
-        self, used_symbols: torch.Tensor, distribution: torch.Tensor
+        self,
+        used_symbols: torch.Tensor,
+        distribution: torch.Tensor,
+        positional_sequence_encoder: PositionalSequenceEncoder,
     ) -> torch.Tensor:
         """
         Args:
@@ -47,10 +46,18 @@ class DirectProbabilityDistributionEmbedder(torch.nn.Module):
         Returns:
             [batch_size, n_symbols + 1, n_embed] tensor of floats
         """
-        B, L = used_symbols.shape
+        B, _ = used_symbols.shape
 
         # Unsqueeze the positional embeddings to [1, n_symbols + 1, n_embed]
-        x = self.positional_embeddings[used_symbols].unsqueeze(0)
+        x = torch.zeros(
+            B,
+            self.config.n_symbols + 1,
+            self.config.n_embed,
+            device=self.config.device,
+            dtype=self.config.dtype,
+        )
+
+        x = positional_sequence_encoder(x)
 
         # Add the distribution to the last dimension
         x[:, :, -1] += distribution

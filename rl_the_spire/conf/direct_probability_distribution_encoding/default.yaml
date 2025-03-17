@@ -2,4 +2,14 @@ dataloader:
   n_symbols: 10
   num_workers: 2
   prefetch_factor: 2
+optimizer:
+  lr: 0.001
+  beta1: 0.9
+  beta2: 0.999
+  weight_decay: 0.0
+  warmup_steps: 1000
 n_batch_size: 10
+n_embed: 10
+device: cpu
+dtype: float32
+init_std: 0.02
