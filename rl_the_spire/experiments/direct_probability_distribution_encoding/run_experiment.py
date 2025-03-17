@@ -10,6 +10,9 @@ from rl_the_spire.conf.direct_probability_distribution_encoding.direct_probabili
 from rl_the_spire.datasets.direct_probability_distribution_dataset import (
     DirectProbabilityDistributionDataset,
 )
+from rl_the_spire.experiments.direct_probability_distribution_encoding.create_dataloader import (
+    create_dataloader,
+)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -32,9 +35,9 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
 
     print("AAA")
 
-    dataset = iter(DirectProbabilityDistributionDataset(config.dataset))
+    dataloader = create_dataloader(config)
 
-    logger.info(next(dataset))
+    logger.info(next(dataloader))
 
     return 0
 

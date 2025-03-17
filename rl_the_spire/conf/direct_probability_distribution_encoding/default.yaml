@@ -1,2 +1,5 @@
-dataset:
+dataloader:
   n_symbols: 10
+  num_workers: 2
+  prefetch_factor: 2
+n_batch_size: 10
