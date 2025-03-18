@@ -23,7 +23,8 @@ def create_models(
 
     positional_sequence_encoder_config = PositionalSequenceEncoderConfig(
         n_embed=config.n_embed,
-        max_seq_len=config.dataloader.n_symbols + 1,
+        max_seq_len=config.dataloader.n_symbols
+        + 1,  # +1 - for the encoded distribution
         device=device,
         dtype=dtype,
         init_std=config.init_std,

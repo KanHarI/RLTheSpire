@@ -15,3 +15,10 @@ class DirectProbabilityDistributionEncodingExperimentConfig:
     dtype: str
     n_embed: int
     init_std: float
+    iterations: int
+    eval_interval: int
+    experiment_name: str
+    wandb_enabled: bool
+    log_interval: int
+    reconstruction_loss_weight: float
+    entropy_loss_weight: float
