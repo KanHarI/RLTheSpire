@@ -22,3 +22,5 @@ class DirectProbabilityDistributionEncodingExperimentConfig:
     log_interval: int
     reconstruction_loss_weight: float
     entropy_loss_weight: float
+    distribution_n_tokens: int
+    n_samples_per_distribution: int

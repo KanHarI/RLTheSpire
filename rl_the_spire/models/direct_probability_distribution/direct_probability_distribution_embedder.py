@@ -10,6 +10,7 @@ from rl_the_spire.models.position_encodings.positional_sequence_encoder import (
 @dataclasses.dataclass
 class DirectProbabilityDistributionEmbedderConfig:
     n_symbols: int
+    distribution_n_tokens: int
     n_embed: int
     device: torch.device
     dtype: torch.dtype
@@ -23,7 +24,7 @@ class DirectProbabilityDistributionEmbedder(torch.nn.Module):
 
         self.symbol_embeddings = torch.nn.Parameter(
             torch.zeros(
-                self.config.n_symbols + 1,
+                self.config.n_symbols + self.config.distribution_n_tokens,
                 self.config.n_embed - 1,  # Last dimension is for the distribution
             ),
             requires_grad=True,
@@ -48,10 +49,9 @@ class DirectProbabilityDistributionEmbedder(torch.nn.Module):
         """
         B, _ = used_symbols.shape
 
-        # Unsqueeze the positional embeddings to [1, n_symbols + 1, n_embed]
         x = torch.zeros(
             B,
-            self.config.n_symbols + 1,
+            self.config.n_symbols + self.config.distribution_n_tokens,
             self.config.n_embed,
             device=self.config.device,
             dtype=self.config.dtype,

@@ -17,6 +17,12 @@ class TrainingIterationInput:
         PositionalSequenceEncoder, DirectProbabilityDistributionEmbedder
     ]
     dataloader: Iterator[Tuple[torch.Tensor, torch.Tensor]]
+    device: torch.device
+    dtype: torch.dtype
+    distribution_n_tokens: int
+    n_symbols: int
+    n_embed: int
+    n_samples_per_distribution: int
 
 
 @dataclasses.dataclass
@@ -26,4 +32,19 @@ class TrainingIterationOutput:
 
 
 def run_training_iteration(input: TrainingIterationInput) -> TrainingIterationOutput:
-    pass
+    positional_sequence_encoder, direct_probability_distribution_embedder = (
+        input.learned_models
+    )
+    dataloader = input.dataloader
+
+    used_symbols, distribution_targets = next(dataloader)
+    used_symbols = used_symbols.to(input.device)
+    distribution_targets = distribution_targets.to(input.device)
+
+    batch_size = used_symbols.shape[0]
+
+    encoded_probability_distributions = direct_probability_distribution_embedder(
+        used_symbols,
+        distribution_targets,
+        positional_sequence_encoder,
+    )[:, :, -input.distribution_n_tokens :]

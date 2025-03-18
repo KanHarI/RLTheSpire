@@ -52,22 +52,25 @@ class PositionalSequenceEncoder(torch.nn.Module):
         Apply positional encodings to the sequence of embeddings.
 
         Args:
-            x: [batch_size, seq_len, n_embed] tensor
+            x: [*batch_size, seq_len, n_embed] tensor
 
         Returns:
             x with positional encodings added: [batch_size, seq_len, n_embed]
         """
         # Get sequence length from input
-        seq_len = x.shape[1]
+        *B, L, E = x.shape
 
-        if seq_len > self.max_seq_len:
+        if L > self.max_seq_len:
             raise ValueError(
-                f"Input sequence length ({seq_len}) exceeds maximum sequence "
+                f"Input sequence length ({L}) exceeds maximum sequence "
                 f"length ({self.max_seq_len})"
             )
 
-        # Create position encodings [1, seq_len, n_embed]
-        pos = self.pos_embeddings[:seq_len].unsqueeze(0)
+        # Unsqueeze to match *B
+        num_unsqueezed_dims = len(B)
+        unsqueezed_pos_embeddings = self.pos_embeddings[:L].view(
+            *([1] * num_unsqueezed_dims), L, E
+        )
 
         # Add positional encodings to the input
-        return x + pos
+        return x + unsqueezed_pos_embeddings

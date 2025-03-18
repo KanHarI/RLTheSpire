@@ -76,12 +76,13 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     while step < config.iterations:
         if step % config.eval_interval == 0:
             # Eval
-            training_iteration_output = run_training_iteration(
+            eval_iteration_output = run_training_iteration(
                 TrainingIterationInput(
                     learned_models=learned_models,
                     dataloader=dataloader,
                 )
             )
+            print(eval_iteration_output.entropy_loss)
             logger.info(f"Eval step {step} of {config.iterations}")
         # Training
         training_iteration_output = run_training_iteration(
@@ -90,6 +91,8 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
                 dataloader=dataloader,
             )
         )
+
+        print(training_iteration_output.entropy_loss)
 
         # Update model
         optimizer.zero_grad()
