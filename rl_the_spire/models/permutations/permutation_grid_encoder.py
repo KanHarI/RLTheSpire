@@ -3,6 +3,7 @@ from typing import Callable
 
 import torch
 
+from rl_the_spire.models.common.mlp import MLP, MLPConfig
 from rl_the_spire.models.permutations.permutation_embedder import (
     PermutationEmbedder,
     PermutationEmbedderConfig,
@@ -46,6 +47,7 @@ class PermutationGridEncoderConfig:
     linear_size_multiplier: int
     conv_transformer_blocks: int
     sigma_output: bool
+    noised_dimension_scaledown: int
 
 
 class PermutationGridEncoder(torch.nn.Module):
@@ -114,11 +116,39 @@ class PermutationGridEncoder(torch.nn.Module):
         )
         self.conv_transformer_body = ConvTransformerBody(conv_transformer_body_config)
 
+        self.latent_dimension_scaledown_proj = torch.nn.Parameter(
+            torch.zeros(
+                config.n_output_embed * (2 if config.sigma_output else 1),
+                (config.n_output_embed * (2 if config.sigma_output else 1))
+                // config.noised_dimension_scaledown,
+                device=config.device,
+                dtype=config.dtype,
+            ),
+            requires_grad=True,
+        )
+        latent_dimension_mlp_config = MLPConfig(
+            n_in=(config.n_output_embed * (2 if config.sigma_output else 1))
+            // config.noised_dimension_scaledown,
+            n_out=(config.n_output_embed * (2 if config.sigma_output else 1))
+            // config.noised_dimension_scaledown,
+            linear_size_multiplier=config.linear_size_multiplier,
+            activation=config.activation,
+            dtype=config.dtype,
+            device=config.device,
+            init_std=config.init_std,
+            dropout=0,  # No dropout in the latent dimension MLP!
+        )
+        self.latent_dimension_mlp = MLP(latent_dimension_mlp_config)
+
     def init_weights(self) -> None:
         self.embedder.init_weights()
         self.transformer_body.init_weights()
         self.attention_to_tensor.init_weights()
         self.conv_transformer_body.init_weights()
+        torch.nn.init.normal_(
+            self.latent_dimension_scaledown_proj, mean=0.0, std=self.config.init_std
+        )
+        self.latent_dimension_mlp.init_weights()
 
     def forward(
         self, pos_encoder: PositionalSequenceEncoder, x: torch.Tensor
@@ -150,10 +180,17 @@ class PermutationGridEncoder(torch.nn.Module):
         # Apply ConvTransformerBody
         tensor_out = self.conv_transformer_body(tensor_out)
 
+        tensor_out = torch.einsum(
+            "bli,ij->blj", tensor_out, self.latent_dimension_scaledown_proj
+        )
+        tensor_out += self.latent_dimension_mlp(tensor_out)
+
         if self.config.sigma_output:
             n_embed = self.config.n_output_embed
-            mus = tensor_out[..., :n_embed]
-            logvars = tensor_out[..., n_embed:]
+            mus = tensor_out[..., : n_embed // self.config.noised_dimension_scaledown]
+            logvars = tensor_out[
+                ..., n_embed // self.config.noised_dimension_scaledown :
+            ]
             return mus, logvars
         else:
             return tensor_out, torch.ones_like(tensor_out)

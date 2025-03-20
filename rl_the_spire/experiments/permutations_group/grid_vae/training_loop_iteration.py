@@ -26,6 +26,7 @@ class TrainingLoopInput:
     learned_networks_tuple: Tuple[
         PermutationGridEncoder,
         PositionalSequenceEncoder,
+        torch.nn.Linear,
         ConvTransformerBody,
         PermutationGridDecoder,
         ConvTransformerBody,
@@ -36,8 +37,6 @@ class TrainingLoopInput:
     target_networks_tuple: Tuple[
         PermutationGridEncoder,
         PositionalSequenceEncoder,
-        ConvTransformerBody,
-        PositionalGridEncoder,
     ]
     dataloaders: Tuple[
         Iterator[Tuple[torch.Tensor, torch.Tensor]],
@@ -68,6 +67,7 @@ def training_loop_iteration(
     (
         permutation_encoder,
         positional_seq_encoder,
+        denoiser_dim_expander,
         denoiser_network,
         permutations_decoder,
         inverter_network,
@@ -79,8 +79,6 @@ def training_loop_iteration(
     (
         target_permutation_encoder,
         target_positional_seq_encoder,
-        _,
-        _,
     ) = tl_input.target_networks_tuple
 
     inversions_dataloader, composition_dataloader = tl_input.dataloaders
@@ -124,27 +122,37 @@ def training_loop_iteration(
     # Sample and denoise all permutations
     sampled_perm = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_perm_mus, ep_perm_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_perm_mus, ep_perm_logvars, tl_input.vae_gamma, 1)
+            ),
         )
     )
     sampled_inv = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_inv_mus, ep_inv_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_inv_mus, ep_inv_logvars, tl_input.vae_gamma, 1)
+            ),
         )
     )
     sampled_p = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_p_mus, ep_p_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_p_mus, ep_p_logvars, tl_input.vae_gamma, 1),
+            )
         )
     )
     sampled_q = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_q_mus, ep_q_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_q_mus, ep_q_logvars, tl_input.vae_gamma, 1),
+            )
         )
     )
     sampled_r = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_r_mus, ep_r_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_r_mus, ep_r_logvars, tl_input.vae_gamma, 1),
+            )
         )
     )
 

@@ -60,3 +60,4 @@ class PermutationGroupGridExperimentConfig:
     ema_tau_warmup_steps: int
     init_ema_target_as_zeros: bool = False
     num_live_to_target_adapter_layers: int = 1
+    noised_dimension_scaledown: int = 2

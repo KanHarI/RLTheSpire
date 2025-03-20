@@ -69,6 +69,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     (
         permutation_encoder,
         positional_seq_encoder,
+        denoiser_dim_expander,
         denoiser_network,
         permutations_decoder,
         inverter_network,
@@ -83,8 +84,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         device,
         permutation_encoder,
         positional_seq_encoder,
-        denoiser_network,
-        positional_grid_encoder,
     )
 
     params_for_optimizer = [
@@ -403,8 +402,6 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
             source_target_pairs = [
                 (permutation_encoder, target_networks_tuple[0]),
                 (positional_seq_encoder, target_networks_tuple[1]),
-                (denoiser_network, target_networks_tuple[2]),
-                (positional_grid_encoder, target_networks_tuple[3]),
             ]
 
             # Update all target networks with the same tau value
