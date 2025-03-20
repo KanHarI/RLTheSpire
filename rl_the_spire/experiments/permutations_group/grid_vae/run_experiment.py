@@ -74,6 +74,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         permutations_decoder,
         inverter_network,
         composer_network,
+        live_to_target_dimensionality_reducer,
         live_to_target_adapter,
         positional_grid_encoder,
     ) = learned_networks_tuple

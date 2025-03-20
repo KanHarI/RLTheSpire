@@ -106,6 +106,7 @@ def create_models(
     PermutationGridDecoder,
     ConvTransformerBody,
     PermutationComposer,
+    torch.nn.Linear,
     ConvTransformerBody,
     PositionalGridEncoder,
 ]:
@@ -128,6 +129,8 @@ def create_models(
         - live_to_target_adapter: Adapter for connecting live models to target models
         - positional_grid_encoder: Positional encoder for grids
     """
+
+    assert config.encoder.n_output_embed % config.noised_dimension_scaledown == 0
 
     activation = get_activation(config.encoder.activation)
 
@@ -265,6 +268,19 @@ def create_models(
     composer_network.init_weights()
     composer_network.train()
 
+    logger.info("Creating live to target dimensionality reducer...")
+    live_to_target_dimensionality_reducer = torch.nn.Linear(
+        config.encoder.n_output_embed,
+        config.encoder.n_output_embed // config.noised_dimension_scaledown,
+        device=device,
+        dtype=dtype,
+    )
+    torch.nn.init.normal_(
+        live_to_target_dimensionality_reducer.weight,
+        mean=0.0,
+        std=config.encoder.init_std,
+    )
+
     # Create live to target adapter
     logger.info("Creating live to target adapter...")
     live_to_target_adapter_config = ConvTransformerBodyConfig(
@@ -307,6 +323,7 @@ def create_models(
         permutations_decoder,
         inverter_network,
         composer_network,
+        live_to_target_dimensionality_reducer,
         live_to_target_adapter,
         positional_grid_encoder,
     )

@@ -31,6 +31,7 @@ class TrainingLoopInput:
         PermutationGridDecoder,
         ConvTransformerBody,
         PermutationComposer,
+        torch.nn.Linear,
         ConvTransformerBody,
         PositionalGridEncoder,
     ]
@@ -72,6 +73,7 @@ def training_loop_iteration(
         permutations_decoder,
         inverter_network,
         composer_network,
+        live_to_target_dimensionality_reducer,
         live_to_target_adapter,
         positional_grid_encoder,
     ) = tl_input.learned_networks_tuple
@@ -166,7 +168,8 @@ def training_loop_iteration(
 
     all_targets = torch.stack([te_perm_mus, te_inv_mus, te_p_mus, te_q_mus, te_r_mus])
     live_to_target_l2 = torch.norm(
-        live_to_target_adapter(all_samples) - all_targets,
+        live_to_target_dimensionality_reducer(live_to_target_adapter(all_samples))
+        - all_targets,
         p=2,
         dim=(2, 3, 4),
     ).mean()
@@ -203,12 +206,14 @@ def training_loop_iteration(
 
     # Construct l2 loss to target network inv, r
     target_inv_l2 = torch.norm(
-        live_to_target_adapter(neural_inv_perm) - te_inv_mus,
+        live_to_target_dimensionality_reducer(live_to_target_adapter(neural_inv_perm))
+        - te_inv_mus,
         p=2,
         dim=(1, 2, 3),
     ).mean()
     target_comp_l2 = torch.norm(
-        live_to_target_adapter(neural_comp_perm) - te_r_mus,
+        live_to_target_dimensionality_reducer(live_to_target_adapter(neural_comp_perm))
+        - te_r_mus,
         p=2,
         dim=(1, 2, 3),
     ).mean()
