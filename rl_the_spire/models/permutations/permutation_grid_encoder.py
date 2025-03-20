@@ -181,7 +181,7 @@ class PermutationGridEncoder(torch.nn.Module):
         tensor_out = self.conv_transformer_body(tensor_out)
 
         tensor_out = torch.einsum(
-            "bli,ij->blj", tensor_out, self.latent_dimension_scaledown_proj
+            "...i,ij->...j", tensor_out, self.latent_dimension_scaledown_proj
         )
         tensor_out += self.latent_dimension_mlp(tensor_out)
 
