@@ -145,9 +145,9 @@ class PermutationGridEncoder(torch.nn.Module):
         self.transformer_body.init_weights()
         self.attention_to_tensor.init_weights()
         self.conv_transformer_body.init_weights()
-        torch.nn.init.normal_(
-            self.latent_dimension_scaledown_proj, mean=0.0, std=self.config.init_std
-        )
+        # Initialize with ones on diagonal plus noise
+        torch.nn.init.eye_(self.latent_dimension_scaledown_proj)
+        self.latent_dimension_scaledown_proj.data += torch.randn_like(self.latent_dimension_scaledown_proj) * self.config.init_std
         self.latent_dimension_mlp.init_weights()
 
     def forward(
