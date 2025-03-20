@@ -57,8 +57,8 @@ log_interval: 100
 reconstruction_loss_weight: 1.0
 neural_inv_perm_loss_weight: 0.5
 neural_comp_perm_loss_weight: 0.5
-latent_inv_perm_loss_weight: 0.10
-latent_comp_perm_loss_weight: 0.10
+latent_inv_perm_loss_weight: 0.05
+latent_comp_perm_loss_weight: 0.05
 latent_sampled_perm_loss_weight: 0.10
 # Latent loss warmup params
 latent_warmup_steps: 5000
