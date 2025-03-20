@@ -52,7 +52,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
         data_class=PermutationGroupGridExperimentConfig,
         data=hydra_cfg,
     )
-
+    
     logger.info("Initializing experiment...")
 
     inversions_dataloader, composition_dataloader = create_dataloaders(config.dataset)

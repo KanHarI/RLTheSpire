@@ -183,7 +183,7 @@ class PermutationGridEncoder(torch.nn.Module):
         tensor_out = torch.einsum(
             "...i,ij->...j", tensor_out, self.latent_dimension_scaledown_proj
         )
-        tensor_out += self.latent_dimension_mlp(tensor_out)
+        tensor_out = tensor_out + self.latent_dimension_mlp(tensor_out)
 
         if self.config.sigma_output:
             n_embed = self.config.n_output_embed
