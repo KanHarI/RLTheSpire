@@ -16,9 +16,9 @@ encoder:
   init_std: 0.02
   ln_eps: 1e-5
   n_output_heads: 4
-  n_output_embed: 64
-  n_output_rows: 8
-  n_output_columns: 8
+  n_output_embed: 128
+  n_output_rows: 6
+  n_output_columns: 6
   activation: "gelu"
   linear_size_multiplier: 4
   sigma_output: false
