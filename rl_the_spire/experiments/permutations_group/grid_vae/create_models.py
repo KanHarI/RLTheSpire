@@ -186,6 +186,13 @@ def create_models(
     torch.nn.init.normal_(
         denoiser_dim_expander.weight, mean=0.0, std=config.encoder.init_std
     )
+    # Add 1 to the diagonal
+    denoiser_dim_expander.weight.data += torch.eye(
+        config.encoder.n_output_embed,
+        config.encoder.n_output_embed // config.noised_dimension_scaledown,
+        device=device,
+        dtype=dtype,
+    )
 
     denoiser_network_config = ConvTransformerBodyConfig(
         n_blocks=config.conv_transformer.denoiser_blocks,
@@ -280,7 +287,13 @@ def create_models(
         mean=0.0,
         std=config.encoder.init_std,
     )
-
+    # Add 1 to the diagonal
+    live_to_target_dimensionality_reducer.weight.data += torch.eye(
+        config.encoder.n_output_embed // config.noised_dimension_scaledown,
+        config.encoder.n_output_embed,
+        device=device,
+        dtype=dtype,
+    )
     # Create live to target adapter
     logger.info("Creating live to target adapter...")
     live_to_target_adapter_config = ConvTransformerBodyConfig(
