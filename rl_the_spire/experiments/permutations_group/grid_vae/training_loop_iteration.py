@@ -190,7 +190,7 @@ def training_loop_iteration(
         [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r]
     )
 
-    consistency_loss = torch.norm(all_mus - all_samples, p=2, dim=(2, 3)).mean()
+    consistency_loss = torch.norm(all_mus - all_samples, p=2, dim=(2, 3, 4)).mean()
 
     # Calculate live to target L2 losses
     live_to_target_l2 = torch.tensor(0.0, device=tl_input.device, dtype=tl_input.dtype)
@@ -199,7 +199,7 @@ def training_loop_iteration(
     live_to_target_l2 = torch.norm(
         live_to_target_adapter(positional_grid_encoder(all_samples)) - all_targets,
         p=2,
-        dim=(2, 3),
+        dim=(2, 3, 4),
     ).mean()
 
     # Decode from latent space (VAE)
@@ -236,12 +236,12 @@ def training_loop_iteration(
     target_inv_l2 = torch.norm(
         live_to_target_adapter(positional_grid_encoder(neural_inv_perm)) - target_inv,
         p=2,
-        dim=(1, 2),
+        dim=(1, 2, 3),
     ).mean()
     target_comp_l2 = torch.norm(
         live_to_target_adapter(positional_grid_encoder(neural_comp_perm)) - target_r,
         p=2,
-        dim=(1, 2),
+        dim=(1, 2, 3),
     ).mean()
 
     # Reconstruction loss after neural group operations
