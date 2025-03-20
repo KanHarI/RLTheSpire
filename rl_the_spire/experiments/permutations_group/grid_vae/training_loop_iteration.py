@@ -79,6 +79,8 @@ def training_loop_iteration(
     (
         target_permutation_encoder,
         target_positional_seq_encoder,
+        _,
+        _,
     ) = tl_input.target_networks_tuple
 
     inversions_dataloader, composition_dataloader = tl_input.dataloaders
