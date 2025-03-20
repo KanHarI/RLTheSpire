@@ -51,7 +51,6 @@ class TrainingLoopInput:
 @dataclasses.dataclass
 class TrainingLoopIterationOutput:
     kl_losses: torch.Tensor
-    encoder_consistency_loss: torch.Tensor
     vae_reconstruction_nll: torch.Tensor
     inv_reconstruction_nll: torch.Tensor
     comp_reconstruction_nll: torch.Tensor
@@ -190,8 +189,6 @@ def training_loop_iteration(
         [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r]
     )
 
-    consistency_loss = torch.norm(all_mus - all_samples, p=2, dim=(2, 3, 4)).mean()
-
     # Calculate live to target L2 losses
     live_to_target_l2 = torch.tensor(0.0, device=tl_input.device, dtype=tl_input.dtype)
 
@@ -257,7 +254,6 @@ def training_loop_iteration(
         vae_reconstruction_nll=vae_reconstruction_nll,
         inv_reconstruction_nll=inv_reconstruction_nll,
         comp_reconstruction_nll=comp_reconstruction_nll,
-        encoder_consistency_loss=consistency_loss,
         live_to_target_l2=live_to_target_l2,
         target_inv_l2=target_inv_l2,
         target_comp_l2=target_comp_l2,

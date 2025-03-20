@@ -60,4 +60,3 @@ class PermutationGroupGridExperimentConfig:
     ema_tau_warmup_steps: int
     init_ema_target_as_zeros: bool = False
     num_live_to_target_adapter_layers: int = 1
-    consistency_loss_weight: float = 0.0

@@ -72,4 +72,3 @@ ema_tau_start: 0.5
 ema_tau_warmup_steps: 5000
 ema_tau: ${ema_tau_final}
 init_ema_target_as_zeros: false
-consistency_loss_weight: 1.0
