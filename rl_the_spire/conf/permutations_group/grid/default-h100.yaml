@@ -34,7 +34,7 @@ vae:
   kl_warmup_steps: 10000
   kl_warmup_start_weight: 0.0
   # Gamma parameters
-  gamma_warmup_steps: 1
+  gamma_warmup_steps: 5000
   gamma_start: 1.0  # Start with high value (less noise)
   gamma_final: 0.5  # Final gamma value (more exploration)
 conv_transformer:
