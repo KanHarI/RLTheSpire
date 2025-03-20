@@ -90,7 +90,7 @@ class PermutationGridEncoder(torch.nn.Module):
             dtype=config.dtype,
             device=config.device,
             init_std=config.init_std,
-            mlp_dropout=config.mlp_dropout,
+            mlp_dropout=0,  # No dropout in the attention to tensor!
         )
         self.attention_to_tensor = AttentionToTensor(attention_to_tensor_config)
 
