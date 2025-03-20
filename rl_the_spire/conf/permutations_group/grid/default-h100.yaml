@@ -63,7 +63,7 @@ latent_sampled_perm_loss_weight: 0.50
 # Latent loss warmup params
 latent_warmup_steps: 10000
 latent_warmup_start_weight: 0.00
-latent_warmup_delay_steps: 2000
+latent_warmup_delay_steps: 5000
 group_operations_warmup_steps: 100
 use_ema_target: true
 # EMA tau scheduling
