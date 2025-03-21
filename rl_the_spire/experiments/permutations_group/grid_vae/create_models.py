@@ -41,13 +41,9 @@ def create_target_models(
     device: torch.device,
     permutation_encoder: PermutationGridEncoder,
     positional_seq_encoder: PositionalSequenceEncoder,
-    denoiser_network: ConvTransformerBody,
-    positional_grid_encoder: PositionalGridEncoder,
 ) -> Tuple[
     PermutationGridEncoder,
     PositionalSequenceEncoder,
-    ConvTransformerBody,
-    PositionalGridEncoder,
 ]:
     """
     Create target models for EMA updates.
@@ -57,22 +53,16 @@ def create_target_models(
         device: The device to create the models on
         permutation_encoder: The source permutation encoder to copy
         positional_seq_encoder: The source positional sequence encoder to copy
-        denoiser_network: The source denoiser network to copy
-        positional_grid_encoder: The source positional grid encoder to copy
 
     Returns:
         Tuple containing:
         - target_encoder: EMA target encoder (None if not using EMA targets)
         - target_positional_encoder: EMA target positional encoder (None if not using EMA targets)
-        - target_denoiser_network: EMA target denoiser network (None if not using EMA targets)
-        - target_positional_grid_encoder: EMA target positional grid encoder (None if not using EMA targets)
     """
     if not config.use_ema_target:
         return (
             permutation_encoder,
             positional_seq_encoder,
-            denoiser_network,
-            positional_grid_encoder,
         )
 
     logger.info("Initializing EMA target encoder")
@@ -82,14 +72,6 @@ def create_target_models(
     logger.info("Initializing EMA target positional encoder")
     target_positional_encoder = copy.deepcopy(positional_seq_encoder)
     target_positional_encoder.to(device)
-
-    logger.info("Initializing EMA target denoiser network")
-    target_denoiser_network = copy.deepcopy(denoiser_network)
-    target_denoiser_network.to(device)
-
-    logger.info("Initializing EMA target positional grid encoder")
-    target_positional_grid_encoder = copy.deepcopy(positional_grid_encoder)
-    target_positional_grid_encoder.to(device)
 
     # Initialize parameters to zeros if specified
     if config.init_ema_target_as_zeros:
@@ -101,26 +83,14 @@ def create_target_models(
         for param in target_positional_encoder.parameters():
             param.data.zero_()
 
-        logger.info("Setting EMA target denoiser network parameters to zeros")
-        for param in target_denoiser_network.parameters():
-            param.data.zero_()
-
-        logger.info("Setting EMA target positional grid encoder parameters to zeros")
-        for param in target_positional_grid_encoder.parameters():
-            param.data.zero_()
-
     # We use torch.no_grad() when needed; We do want these dropout layers active
     # target_encoder.eval()
     # target_positional_encoder.eval()
     target_encoder.train()
     target_positional_encoder.train()
-    target_denoiser_network.train()
-    target_positional_grid_encoder.train()
     return (
         target_encoder,
         target_positional_encoder,
-        target_denoiser_network,
-        target_positional_grid_encoder,
     )
 
 
@@ -131,10 +101,12 @@ def create_models(
 ) -> Tuple[
     PermutationGridEncoder,
     PositionalSequenceEncoder,
+    torch.nn.Linear,
     ConvTransformerBody,
     PermutationGridDecoder,
     ConvTransformerBody,
     PermutationComposer,
+    torch.nn.Linear,
     ConvTransformerBody,
     PositionalGridEncoder,
 ]:
@@ -157,6 +129,8 @@ def create_models(
         - live_to_target_adapter: Adapter for connecting live models to target models
         - positional_grid_encoder: Positional encoder for grids
     """
+
+    assert config.encoder.n_output_embed % config.noised_dimension_scaledown == 0
 
     activation = get_activation(config.encoder.activation)
 
@@ -183,6 +157,7 @@ def create_models(
         conv_transformer_n_heads=config.conv_transformer.n_heads,
         conv_transformer_blocks=config.encoder.conv_blocks,
         sigma_output=config.encoder.sigma_output,
+        noised_dimension_scaledown=config.noised_dimension_scaledown,
     )
     permutation_encoder = PermutationGridEncoder(permutation_encoder_config)
     permutation_encoder.init_weights()
@@ -202,6 +177,23 @@ def create_models(
 
     # Create denoiser network
     logger.info("Creating denoiser network...")
+    denoiser_dim_expander = torch.nn.Linear(
+        config.encoder.n_output_embed // config.noised_dimension_scaledown,
+        config.encoder.n_output_embed,
+        device=device,
+        dtype=dtype,
+    )
+    torch.nn.init.normal_(
+        denoiser_dim_expander.weight, mean=0.0, std=config.encoder.init_std
+    )
+    # Add 1 to the diagonal
+    denoiser_dim_expander.weight.data += torch.eye(
+        config.encoder.n_output_embed,
+        config.encoder.n_output_embed // config.noised_dimension_scaledown,
+        device=device,
+        dtype=dtype,
+    )
+
     denoiser_network_config = ConvTransformerBodyConfig(
         n_blocks=config.conv_transformer.denoiser_blocks,
         n_embed=config.encoder.n_output_embed,
@@ -283,6 +275,25 @@ def create_models(
     composer_network.init_weights()
     composer_network.train()
 
+    logger.info("Creating live to target dimensionality reducer...")
+    live_to_target_dimensionality_reducer = torch.nn.Linear(
+        config.encoder.n_output_embed,
+        config.encoder.n_output_embed // config.noised_dimension_scaledown,
+        device=device,
+        dtype=dtype,
+    )
+    torch.nn.init.normal_(
+        live_to_target_dimensionality_reducer.weight,
+        mean=0.0,
+        std=config.encoder.init_std,
+    )
+    # Add 1 to the diagonal
+    live_to_target_dimensionality_reducer.weight.data += torch.eye(
+        config.encoder.n_output_embed // config.noised_dimension_scaledown,
+        config.encoder.n_output_embed,
+        device=device,
+        dtype=dtype,
+    )
     # Create live to target adapter
     logger.info("Creating live to target adapter...")
     live_to_target_adapter_config = ConvTransformerBodyConfig(
@@ -320,10 +331,12 @@ def create_models(
     return (
         permutation_encoder,
         positional_seq_encoder,
+        denoiser_dim_expander,
         denoiser_network,
         permutations_decoder,
         inverter_network,
         composer_network,
+        live_to_target_dimensionality_reducer,
         live_to_target_adapter,
         positional_grid_encoder,
     )

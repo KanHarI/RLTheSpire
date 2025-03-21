@@ -26,18 +26,18 @@ class TrainingLoopInput:
     learned_networks_tuple: Tuple[
         PermutationGridEncoder,
         PositionalSequenceEncoder,
+        torch.nn.Linear,
         ConvTransformerBody,
         PermutationGridDecoder,
         ConvTransformerBody,
         PermutationComposer,
+        torch.nn.Linear,
         ConvTransformerBody,
         PositionalGridEncoder,
     ]
     target_networks_tuple: Tuple[
         PermutationGridEncoder,
         PositionalSequenceEncoder,
-        ConvTransformerBody,
-        PositionalGridEncoder,
     ]
     dataloaders: Tuple[
         Iterator[Tuple[torch.Tensor, torch.Tensor]],
@@ -51,7 +51,6 @@ class TrainingLoopInput:
 @dataclasses.dataclass
 class TrainingLoopIterationOutput:
     kl_losses: torch.Tensor
-    encoder_consistency_loss: torch.Tensor
     vae_reconstruction_nll: torch.Tensor
     inv_reconstruction_nll: torch.Tensor
     comp_reconstruction_nll: torch.Tensor
@@ -69,10 +68,12 @@ def training_loop_iteration(
     (
         permutation_encoder,
         positional_seq_encoder,
+        denoiser_dim_expander,
         denoiser_network,
         permutations_decoder,
         inverter_network,
         composer_network,
+        live_to_target_dimensionality_reducer,
         live_to_target_adapter,
         positional_grid_encoder,
     ) = tl_input.learned_networks_tuple
@@ -80,8 +81,6 @@ def training_loop_iteration(
     (
         target_permutation_encoder,
         target_positional_seq_encoder,
-        target_denoiser_network,
-        target_positional_grid_encoder,
     ) = tl_input.target_networks_tuple
 
     inversions_dataloader, composition_dataloader = tl_input.dataloaders
@@ -116,72 +115,46 @@ def training_loop_iteration(
 
     # Encode all permutations using the target encoder
     with torch.no_grad():
-        te_perm_mus, te_perm_logvars = target_permutation_encoder(
-            target_positional_seq_encoder, perm
-        )
-        te_inv_mus, te_inv_logvars = target_permutation_encoder(
-            target_positional_seq_encoder, inv
-        )
-        te_p_mus, te_p_logvars = target_permutation_encoder(
-            target_positional_seq_encoder, p
-        )
-        te_q_mus, te_q_logvars = target_permutation_encoder(
-            target_positional_seq_encoder, q
-        )
-        te_r_mus, te_r_logvars = target_permutation_encoder(
-            target_positional_seq_encoder, r
-        )
-
-        target_perm = target_denoiser_network(
-            target_positional_grid_encoder(
-                gamma_vae_sample(te_perm_mus, te_perm_logvars, tl_input.vae_gamma, 1)
-            )
-        )
-        target_inv = target_denoiser_network(
-            target_positional_grid_encoder(
-                gamma_vae_sample(te_inv_mus, te_inv_logvars, tl_input.vae_gamma, 1)
-            )
-        )
-        target_p = target_denoiser_network(
-            target_positional_grid_encoder(
-                gamma_vae_sample(te_p_mus, te_p_logvars, tl_input.vae_gamma, 1)
-            )
-        )
-        target_q = target_denoiser_network(
-            target_positional_grid_encoder(
-                gamma_vae_sample(te_q_mus, te_q_logvars, tl_input.vae_gamma, 1)
-            )
-        )
-        target_r = target_denoiser_network(
-            target_positional_grid_encoder(
-                gamma_vae_sample(te_r_mus, te_r_logvars, tl_input.vae_gamma, 1)
-            )
-        )
+        te_perm_mus, _ = target_permutation_encoder(target_positional_seq_encoder, perm)
+        te_inv_mus, _ = target_permutation_encoder(target_positional_seq_encoder, inv)
+        te_p_mus, _ = target_permutation_encoder(target_positional_seq_encoder, p)
+        te_q_mus, _ = target_permutation_encoder(target_positional_seq_encoder, q)
+        te_r_mus, _ = target_permutation_encoder(target_positional_seq_encoder, r)
 
     # Sample and denoise all permutations
     sampled_perm = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_perm_mus, ep_perm_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_perm_mus, ep_perm_logvars, tl_input.vae_gamma, 1)
+            ),
         )
     )
     sampled_inv = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_inv_mus, ep_inv_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_inv_mus, ep_inv_logvars, tl_input.vae_gamma, 1)
+            ),
         )
     )
     sampled_p = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_p_mus, ep_p_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_p_mus, ep_p_logvars, tl_input.vae_gamma, 1),
+            )
         )
     )
     sampled_q = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_q_mus, ep_q_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_q_mus, ep_q_logvars, tl_input.vae_gamma, 1),
+            )
         )
     )
     sampled_r = denoiser_network(
         positional_grid_encoder(
-            gamma_vae_sample(ep_r_mus, ep_r_logvars, tl_input.vae_gamma, 1)
+            denoiser_dim_expander(
+                gamma_vae_sample(ep_r_mus, ep_r_logvars, tl_input.vae_gamma, 1),
+            )
         )
     )
 
@@ -190,16 +163,15 @@ def training_loop_iteration(
         [sampled_perm, sampled_inv, sampled_p, sampled_q, sampled_r]
     )
 
-    consistency_loss = torch.norm(all_mus - all_samples, p=2, dim=(2, 3)).mean()
-
     # Calculate live to target L2 losses
     live_to_target_l2 = torch.tensor(0.0, device=tl_input.device, dtype=tl_input.dtype)
 
-    all_targets = torch.stack([target_perm, target_inv, target_p, target_q, target_r])
+    all_targets = torch.stack([te_perm_mus, te_inv_mus, te_p_mus, te_q_mus, te_r_mus])
     live_to_target_l2 = torch.norm(
-        live_to_target_adapter(positional_grid_encoder(all_samples)) - all_targets,
+        live_to_target_dimensionality_reducer(live_to_target_adapter(all_samples))
+        - all_targets,
         p=2,
-        dim=(2, 3),
+        dim=(2, 3, 4),
     ).mean()
 
     # Decode from latent space (VAE)
@@ -234,14 +206,16 @@ def training_loop_iteration(
 
     # Construct l2 loss to target network inv, r
     target_inv_l2 = torch.norm(
-        live_to_target_adapter(positional_grid_encoder(neural_inv_perm)) - target_inv,
+        live_to_target_dimensionality_reducer(live_to_target_adapter(neural_inv_perm))
+        - te_inv_mus,
         p=2,
-        dim=(1, 2),
+        dim=(1, 2, 3),
     ).mean()
     target_comp_l2 = torch.norm(
-        live_to_target_adapter(positional_grid_encoder(neural_comp_perm)) - target_r,
+        live_to_target_dimensionality_reducer(live_to_target_adapter(neural_comp_perm))
+        - te_r_mus,
         p=2,
-        dim=(1, 2),
+        dim=(1, 2, 3),
     ).mean()
 
     # Reconstruction loss after neural group operations
@@ -257,7 +231,6 @@ def training_loop_iteration(
         vae_reconstruction_nll=vae_reconstruction_nll,
         inv_reconstruction_nll=inv_reconstruction_nll,
         comp_reconstruction_nll=comp_reconstruction_nll,
-        encoder_consistency_loss=consistency_loss,
         live_to_target_l2=live_to_target_l2,
         target_inv_l2=target_inv_l2,
         target_comp_l2=target_comp_l2,

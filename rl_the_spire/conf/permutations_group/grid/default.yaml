@@ -72,3 +72,4 @@ ema_tau_start: 0.05   # Initial higher tau value
 ema_tau_warmup_steps: 5000  # Steps to decrease from start to final value
 ema_tau: ${ema_tau_final}  # Keeping for backward compatibility
 init_ema_target_as_zeros: false
+group_operations_warmup_steps: 5000
