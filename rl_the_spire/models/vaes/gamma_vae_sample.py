@@ -24,7 +24,7 @@ def gamma_vae_sample(
     Returns:
         torch.Tensor: A sample tensor of shape [B, ...].
     """
-    # Compute standard deviation.
+    # Compute standard deviation without modifying logvars
     sigma = torch.exp(0.5 * logvars)
 
     # Sample one uniform value per batch item.
@@ -34,12 +34,15 @@ def gamma_vae_sample(
     batch_shape = batch_dims_shape + padding_dims
     u = torch.rand(batch_shape, dtype=mus.dtype, device=mus.device)
 
-    # Compute the scaling factor.
-    scaling = u**gamma
+    # Compute the scaling factor without modifying u
+    scaling = torch.pow(u, gamma)
 
-    # Sample epsilon with the same shape as mus.
+    # Sample epsilon with the same shape as mus
     epsilon = torch.randn_like(mus)
 
-    # Return the reparameterized sample.
-    result: torch.Tensor = mus + scaling * sigma * epsilon
+    # Compute the result without modifying any input tensors
+    scaled_sigma = scaling * sigma
+    scaled_epsilon = scaled_sigma * epsilon
+    result = mus + scaled_epsilon
+
     return result
