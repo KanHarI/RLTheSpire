@@ -26,3 +26,7 @@ def main(hydra_cfg: dict[Any, Any]) -> int:
     logger.info(f"Config: {config}")
 
     return 0
+
+
+if __name__ == "__main__":
+    main()

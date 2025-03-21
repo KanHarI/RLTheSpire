@@ -8,3 +8,5 @@ from rl_the_spire.conf.permutations_group.permutation_group_dataset_config impor
 @dataclasses.dataclass
 class PermutationGroupSequenceVAEConfig:
     dataset: PermutationGroupDatasetConfig
+    n_embed: int
+    autoencoder_latent_dim_scaledown: int
