@@ -8,17 +8,17 @@ from rl_the_spire.conf.permutations_group.grid.permutation_group_grid_experiment
     PermutationGroupGridExperimentConfig,
 )
 from rl_the_spire.conf.utils.activations import get_activation
-from rl_the_spire.models.permutations.permutation_composer import (
-    PermutationComposer,
-    PermutationComposerConfig,
-)
-from rl_the_spire.models.permutations.permutation_grid_decoder import (
+from rl_the_spire.models.permutations.grid.permutation_grid_decoder import (
     PermutationGridDecoder,
     PermutationGridDecoderConfig,
 )
-from rl_the_spire.models.permutations.permutation_grid_encoder import (
+from rl_the_spire.models.permutations.grid.permutation_grid_encoder import (
     PermutationGridEncoder,
     PermutationGridEncoderConfig,
+)
+from rl_the_spire.models.permutations.permutation_composer import (
+    PermutationComposer,
+    PermutationComposerConfig,
 )
 from rl_the_spire.models.position_encodings.positional_grid_encoder import (
     PositionalGridEncoder,

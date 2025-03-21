@@ -3,13 +3,13 @@ from typing import Iterator, Tuple
 
 import torch
 
-from rl_the_spire.models.permutations.permutation_composer import PermutationComposer
-from rl_the_spire.models.permutations.permutation_grid_decoder import (
+from rl_the_spire.models.permutations.grid.permutation_grid_decoder import (
     PermutationGridDecoder,
 )
-from rl_the_spire.models.permutations.permutation_grid_encoder import (
+from rl_the_spire.models.permutations.grid.permutation_grid_encoder import (
     PermutationGridEncoder,
 )
+from rl_the_spire.models.permutations.permutation_composer import PermutationComposer
 from rl_the_spire.models.position_encodings.positional_grid_encoder import (
     PositionalGridEncoder,
 )
